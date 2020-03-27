@@ -1,2 +1,2 @@
 # data-lagoon
-A curious collection of data
+A curious collection of data for friends.
