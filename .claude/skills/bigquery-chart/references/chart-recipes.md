@@ -11,13 +11,14 @@ All inputs are local (frozen parquet / polars frames). Never query BigQuery here
 | a small ranked table to publish | great-tables `GT` |
 
 ## plotly from polars
-plotly 6 accepts polars frames (via narwhals); `.to_pandas()` is the universal fallback.
+plotly 6 (with narwhals) + numpy accept polars frames **directly** — no pandas needed. If you
+ever need a pandas-only feature, `uv add pandas` then pass `df.to_pandas()`.
 
 ```python
 import plotly.express as px
 
 fig = px.bar(
-    df.sort("avg_score", descending=True).head(15).to_pandas(),
+    df.sort("avg_score", descending=True).head(15),
     x="avg_score", y="term", orientation="h",
     title="Top terms by relative search interest",
 )
@@ -28,7 +29,7 @@ fig.write_html("out/top_terms.html", include_plotlyjs="cdn")  # small, shareable
 ## Time series
 ```python
 ts = df.group_by("week").agg(pl.col("score").mean().alias("avg_score")).sort("week")
-px.line(ts.to_pandas(), x="week", y="avg_score", title="Interest over time")
+px.line(ts, x="week", y="avg_score", title="Interest over time")
 ```
 
 ## Publication table (great-tables from polars)

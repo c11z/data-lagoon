@@ -128,10 +128,8 @@ def analyze(df):
 def chart(df):
     import plotly.express as px
 
-    # plotly 6 accepts polars via narwhals; .to_pandas() is the universal fallback.
-    fig = px.bar(
-        df.to_pandas(), x="term", y="avg_score", title="Top terms by relative search interest"
-    )
+    # plotly 6 accepts polars directly (via narwhals) — no pandas dependency needed.
+    fig = px.bar(df, x="term", y="avg_score", title="Top terms by relative search interest")
     fig
     return (px,)
 
