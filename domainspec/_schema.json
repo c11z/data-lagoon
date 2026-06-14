@@ -1,0 +1,262 @@
+{
+  "$defs": {
+    "Column": {
+      "additionalProperties": false,
+      "description": "A single column in a governed table.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "dtype": {
+          "title": "Dtype",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        }
+      },
+      "required": [
+        "name",
+        "dtype"
+      ],
+      "title": "Column",
+      "type": "object"
+    },
+    "Metric": {
+      "additionalProperties": false,
+      "description": "A compiled metric: an aggregation expression bound to a table.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "table": {
+          "description": "must match a Table.name in this dataset",
+          "title": "Table",
+          "type": "string"
+        },
+        "sql": {
+          "description": "the aggregation expression, e.g. \"AVG(score)\"",
+          "title": "Sql",
+          "type": "string"
+        },
+        "grain": {
+          "title": "Grain",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "default_segments": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Default Segments",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "table",
+        "sql",
+        "grain",
+        "description"
+      ],
+      "title": "Metric",
+      "type": "object"
+    },
+    "Segment": {
+      "additionalProperties": false,
+      "description": "A named canonical population filter.\n\nHand-rolled WHERE clauses for these are, per the article, \"the dominant wrong-answer\nmode\" \u2014 so we name them once and reuse them.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "sql_predicate": {
+          "description": "a boolean SQL expression, e.g. \"rank <= 10\"",
+          "title": "Sql Predicate",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "sql_predicate",
+        "description"
+      ],
+      "title": "Segment",
+      "type": "object"
+    },
+    "Table": {
+      "additionalProperties": false,
+      "description": "A governed table. ``name`` is fully qualified: ``project.dataset.table``.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "grain": {
+          "description": "what exactly one row represents",
+          "title": "Grain",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "hygiene_filter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "WHERE predicate applied to every query in this domain",
+          "title": "Hygiene Filter"
+        },
+        "partition_column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "the cost-relevant partition; queries MUST filter it",
+          "title": "Partition Column"
+        },
+        "time_column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "freshness/recency anchor (often == partition_column)",
+          "title": "Time Column"
+        },
+        "columns": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Column"
+          },
+          "title": "Columns",
+          "type": "array"
+        },
+        "join_keys": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Join Keys",
+          "type": "array"
+        },
+        "scope_exclusions": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope Exclusions"
+        }
+      },
+      "required": [
+        "name",
+        "grain"
+      ],
+      "title": "Table",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One curated public dataset = one ``domainspec/<name>.yaml`` file.",
+  "properties": {
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "location": {
+      "default": "US",
+      "title": "Location",
+      "type": "string"
+    },
+    "business_context": {
+      "title": "Business Context",
+      "type": "string"
+    },
+    "tables": {
+      "items": {
+        "$ref": "#/$defs/Table"
+      },
+      "title": "Tables",
+      "type": "array"
+    },
+    "metrics": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Metric"
+      },
+      "title": "Metrics",
+      "type": "array"
+    },
+    "segments": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Segment"
+      },
+      "title": "Segments",
+      "type": "array"
+    },
+    "gotchas": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Gotchas",
+      "type": "array"
+    }
+  },
+  "required": [
+    "name",
+    "business_context",
+    "tables"
+  ],
+  "title": "Dataset",
+  "type": "object"
+}

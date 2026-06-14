@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars (gitignored) and edit. Everything is optional — the defaults
+# provision the scratch dataset + enable APIs and assume you query as the project owner.
+
+project_id  = "c11z-data-lagoon"
+bq_location = "US"
+
+# Grant query access to specific identities (otherwise you query as project owner):
+# analyst_members = ["user:you@example.com"]
+
+# Create a dedicated analyst service account too:
+# create_service_account = true
+
+# Billing budget ALERT (needs billing-account IAM; alerts only, does NOT cap spend):
+# create_budget     = true
+# billing_account   = "XXXXXX-XXXXXX-XXXXXX"
+# budget_amount_usd = 50

@@ -1,0 +1,54 @@
+# Offline evals for the google_trends semantic layer.
+#
+# We grade the agent's QUERY (compiled SQL shape), NOT a live number — public data drifts,
+# so a pinned-number assertion would become noise (the article's "anchor ground truth").
+# Each case either compiles a metric (deterministic, gradable here) or supplies candidate_sql.
+- id: avg-score-by-term
+  question: Average relative search interest by term over the last 7 days (US DMAs).
+  dataset: google_trends
+  metric: avg_score
+  compile: {dimensions: [term], last_n_days: 7, limit: 25}
+  must_contain: ["AVG(score) AS avg_score", "refresh_date >=", "GROUP BY term"]
+  must_not_contain: ["SELECT *"]
+
+- id: rising-terms
+  question: Which terms are rising fastest recently?
+  dataset: google_trends
+  metric: avg_percent_gain
+  compile: {dimensions: [term], last_n_days: 14, limit: 20}
+  must_contain: ["AVG(percent_gain)", "top_rising_terms", "refresh_date >="]
+  must_not_contain: ["SELECT *"]
+
+- id: distinct-terms-by-week
+  question: How many distinct terms trended each week last month?
+  dataset: google_trends
+  metric: distinct_terms
+  compile: {dimensions: [week], last_n_days: 30}
+  must_contain: ["COUNT(DISTINCT term)", "GROUP BY week", "refresh_date >="]
+  must_not_contain: ["SELECT *", "LIMIT"]
+
+- id: intl-us-segment
+  question: Top terms' average interest in the US (international table).
+  dataset: google_trends
+  metric: intl_avg_score
+  compile: {dimensions: [term], segments: [country_us], last_n_days: 7, limit: 10}
+  must_contain: ["international_top_terms", "country_code = 'US'", "score IS NOT NULL"]
+  must_not_contain: ["SELECT *"]
+
+# A raw-SQL case graded against a candidate (no metric): the latest-refresh dedup pattern.
+- id: latest-week-top10
+  question: Top 10 terms for the latest published week, deduped to the latest refresh.
+  dataset: google_trends
+  candidate_sql: |
+    WITH latest AS (
+        SELECT MAX(refresh_date) AS rd
+        FROM `bigquery-public-data.google_trends.top_terms`
+        WHERE refresh_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 14 DAY)
+    )
+    SELECT dma_name, term, rank
+    FROM `bigquery-public-data.google_trends.top_terms`
+    WHERE refresh_date = (SELECT rd FROM latest)
+        AND rank <= 10
+    ORDER BY dma_name, rank
+  must_contain: ["MAX(refresh_date)", "rank <= 10", "refresh_date ="]
+  must_not_contain: ["SELECT *"]

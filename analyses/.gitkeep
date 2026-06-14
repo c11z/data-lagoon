@@ -1,0 +1,3 @@
+# Per-analysis folders live here: analyses/<YYYY-MM-DD>-<slug>/
+# Create one with: uv run python scripts/new_analysis.py --slug <name> --dataset google_trends
+# Each holds notebook.py + queries/*.sql (committed) and data/*.parquet + out/ (gitignored).

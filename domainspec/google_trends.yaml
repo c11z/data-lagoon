@@ -1,0 +1,148 @@
+# yaml-language-server: $schema=./_schema.json
+#
+# DomainSpec for bigquery-public-data.google_trends — the curated semantic layer.
+# Human-owned. Claude may draft prose here, but a human owns every metric/segment.
+# Regenerate the JSON schema with:  uv run python scripts/gen_schema.py
+name: google_trends
+location: US
+business_context: >-
+  Google Trends Top Charts: the 25 most popular ("top") and fastest-rising ("rising")
+  Google search terms by week, broken out by US Designated Market Area (DMA) and, in the
+  international_* tables, by country/region. Use it for "what was trending where/when"
+  questions. Scores are RELATIVE search interest (0-100), not absolute volumes.
+
+tables:
+  - name: bigquery-public-data.google_trends.top_terms
+    grain: >-
+      one (dma, term, week) row giving that term's rank and relative search interest in a
+      US DMA for a given week, as reported on refresh_date
+    description: Top 25 search terms per US DMA per week.
+    partition_column: refresh_date
+    time_column: refresh_date
+    hygiene_filter: null # none required beyond the mandatory refresh_date partition filter
+    join_keys: [dma_id, week, refresh_date]
+    columns:
+      - {name: dma_name, dtype: STRING, description: "Designated Market Area name, e.g. 'New York NY'"}
+      - {name: dma_id, dtype: INT64, description: Numeric DMA identifier}
+      - {name: term, dtype: STRING, description: The trending search term}
+      - {name: week, dtype: DATE, description: Week (Sunday) the ranking applies to}
+      - {name: score, dtype: INT64, description: Relative search interest 0-100 within DMA/week (nullable)}
+      - {name: rank, dtype: INT64, description: Rank 1-25 within DMA/week (1 = most popular)}
+      - {name: refresh_date, dtype: DATE, description: Date Google refreshed the data; the PARTITION column}
+
+  - name: bigquery-public-data.google_trends.top_rising_terms
+    grain: one (dma, term, week) row for a fastest-rising term in a US DMA for a week
+    description: Top 25 fastest-rising search terms per US DMA per week.
+    partition_column: refresh_date
+    time_column: refresh_date
+    hygiene_filter: null
+    join_keys: [dma_id, week, refresh_date]
+    columns:
+      - {name: dma_name, dtype: STRING, description: Designated Market Area name}
+      - {name: dma_id, dtype: INT64, description: Numeric DMA identifier}
+      - {name: term, dtype: STRING, description: The rising search term}
+      - {name: week, dtype: DATE, description: Week (Sunday) the ranking applies to}
+      - {name: score, dtype: INT64, description: Relative search interest 0-100 (nullable)}
+      - {name: percent_gain, dtype: INT64, description: Percent growth in search interest week-over-week}
+      - {name: rank, dtype: INT64, description: Rank 1-25 by rate of growth (1 = fastest rising)}
+      - {name: refresh_date, dtype: DATE, description: Date Google refreshed the data; the PARTITION column}
+
+  - name: bigquery-public-data.google_trends.international_top_terms
+    grain: one (country/region, term, week) row for a top term outside the US DMA breakdown
+    description: Top search terms per country/region per week (non-US-DMA view).
+    partition_column: refresh_date
+    time_column: refresh_date
+    hygiene_filter: null
+    join_keys: [country_code, region_code, week, refresh_date]
+    columns:
+      - {name: country_name, dtype: STRING, description: Country name}
+      - {name: country_code, dtype: STRING, description: ISO country code such as US or GB}
+      - {name: region_name, dtype: STRING, description: Sub-national region name (nullable)}
+      - {name: region_code, dtype: STRING, description: Region code (nullable)}
+      - {name: term, dtype: STRING, description: The trending search term}
+      - {name: week, dtype: DATE, description: Week (Sunday) the ranking applies to}
+      - {name: score, dtype: INT64, description: Relative search interest 0-100 (nullable)}
+      - {name: rank, dtype: INT64, description: Rank within country/region/week (1 = most popular)}
+      - {name: refresh_date, dtype: DATE, description: Date Google refreshed the data; the PARTITION column}
+
+  - name: bigquery-public-data.google_trends.international_top_rising_terms
+    grain: one (country/region, term, week) row for a fastest-rising term internationally
+    description: Fastest-rising search terms per country/region per week.
+    partition_column: refresh_date
+    time_column: refresh_date
+    hygiene_filter: null
+    join_keys: [country_code, region_code, week, refresh_date]
+    columns:
+      - {name: country_name, dtype: STRING, description: Country name}
+      - {name: country_code, dtype: STRING, description: ISO country code}
+      - {name: region_name, dtype: STRING, description: Sub-national region name (nullable)}
+      - {name: region_code, dtype: STRING, description: Region code (nullable)}
+      - {name: term, dtype: STRING, description: The rising search term}
+      - {name: week, dtype: DATE, description: Week (Sunday) the ranking applies to}
+      - {name: score, dtype: INT64, description: Relative search interest 0-100 (nullable)}
+      - {name: percent_gain, dtype: INT64, description: Percent growth in search interest}
+      - {name: rank, dtype: INT64, description: Rank by rate of growth (1 = fastest rising)}
+      - {name: refresh_date, dtype: DATE, description: Date Google refreshed the data; the PARTITION column}
+
+segments:
+  - name: top_10
+    sql_predicate: rank <= 10
+    description: Only the top-10 ranked terms (rank 1-10).
+  - name: top_5
+    sql_predicate: rank <= 5
+    description: Only the top-5 ranked terms.
+  - name: nonnull_score
+    sql_predicate: score IS NOT NULL
+    description: Drop rows with no relative-interest score (common for low-volume terms).
+  - name: country_us
+    sql_predicate: country_code = 'US'
+    description: International tables only — restrict to the United States.
+
+metrics:
+  - name: avg_score
+    table: bigquery-public-data.google_trends.top_terms
+    sql: AVG(score)
+    grain: average relative search interest per grouping dimensions
+    description: Mean relative search interest (0-100) of top terms in US DMAs.
+    default_segments: [nonnull_score]
+  - name: term_appearances
+    table: bigquery-public-data.google_trends.top_terms
+    sql: COUNT(*)
+    grain: count of DMA-week rows per grouping dimensions
+    description: Breadth of popularity — how many DMA-week slots a term occupied.
+    default_segments: []
+  - name: distinct_terms
+    table: bigquery-public-data.google_trends.top_terms
+    sql: COUNT(DISTINCT term)
+    grain: distinct trending terms per grouping dimensions
+    description: Number of distinct terms that appeared in the top charts.
+    default_segments: []
+  - name: avg_percent_gain
+    table: bigquery-public-data.google_trends.top_rising_terms
+    sql: AVG(percent_gain)
+    grain: average week-over-week percent growth per grouping dimensions
+    description: Mean rate of growth among fastest-rising terms in US DMAs.
+    default_segments: []
+  - name: intl_avg_score
+    table: bigquery-public-data.google_trends.international_top_terms
+    sql: AVG(score)
+    grain: average relative search interest per grouping dimensions (international)
+    description: Mean relative search interest of top terms by country/region.
+    default_segments: [nonnull_score]
+
+gotchas:
+  - >-
+    Partitioned by refresh_date. ALWAYS filter refresh_date or you scan the full ~5-year
+    history. LIMIT does NOT reduce bytes scanned — only a partition filter does.
+  - >-
+    The same `week` appears under many `refresh_date`s (each refresh re-reports recent
+    weeks). For "the" ranking of a week, take the latest refresh:
+    WHERE refresh_date = (SELECT MAX(refresh_date) FROM `...top_terms`). Otherwise rows
+    double-count across refreshes.
+  - "`rank` is 1..25 (1 = most popular / fastest rising). `score` is relative interest 0-100 and can be NULL."
+  - >-
+    top_terms / top_rising_terms are US-only (Designated Market Areas). For other
+    countries use international_top_terms / international_top_rising_terms (country_code,
+    region_code).
+  - top_terms = most popular; top_rising_terms = fastest growing (percent_gain). Don't conflate them.
+  - Rolling window — only roughly the last 5 years are retained; older weeks drop off.
