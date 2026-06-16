@@ -14,10 +14,12 @@ Reads the **local parquet** produced by the two-phase notebook (or any polars fr
 renders charts/tables. **It never re-queries BigQuery** — all inputs are on disk.
 
 ## Hard rule
+
 Input is `analyses/<slug>/data/*.parquet` (or a polars frame already in scope). If the data
 isn't extracted yet, stop and route to `bigquery-notebook`. Never import the BigQuery client.
 
 ## Workflow
+
 1. **Load**: `df = pl.read_parquet("analyses/<slug>/data/<file>.parquet")`.
 2. **Pick the form** by data shape (see `references/chart-recipes.md`):
    time → line; category ranking → bar; parts-of-whole → treemap/pie (sparingly); a small
@@ -28,10 +30,12 @@ isn't extracted yet, stop and route to `bigquery-notebook`. Never import the Big
 5. Keep the **provenance footer** with any shared figure/table.
 
 ## When to use / not
+
 - **Use** to chart/tabulate a result you already extracted.
 - **Don't use** to fetch data → `bigquery-notebook` / `bigquery-query`.
 
 ## References
+
 | Topic | File |
 |---|---|
 | plotly + great-tables recipes from polars | `references/chart-recipes.md` |

@@ -1,6 +1,7 @@
 # Dataset Catalog & Navigation
 
 ## Curated datasets (have a semantic layer + reference doc)
+
 These get the full treatment — a `domainspec/<name>.yaml` semantic layer and a reference
 doc. Resolve questions through them first.
 
@@ -14,6 +15,7 @@ following the same skeleton as `google_trends.md`. Add the dataset to
 `ALLOWLIST` in `src/data_lagoon/config.py`.
 
 ## Non-curated public datasets
+
 The metadata scripts work against **any** `bigquery-public-data` dataset for free — there's
 just no semantic layer, so:
 
@@ -24,6 +26,7 @@ just no semantic layer, so:
   `crypto_*`) can scan terabytes. Always `bq_dry_run.py` first and keep the hard cap on.
 
 ## What this skill does NOT do
+
 - It does not run billable queries → `bigquery-query`.
 - It does not track lineage — public datasets have no transformation pipelines (a
   deliberate omission for this harness).

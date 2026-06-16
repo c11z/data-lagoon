@@ -5,6 +5,7 @@ entity mapping*, not clever SQL. Procedural depth lives in `.claude/skills/`; re
 relevant SKILL.md before acting.
 
 ## Non-negotiables
+
 1. **Look up before you query.** Start with `bigquery-metadata` → search the DomainSpec
    (`scripts/spec_lookup.py`) and inspect tables (`scripts/bq_schema.py`, free) before
    writing SQL.
@@ -23,11 +24,13 @@ relevant SKILL.md before acting.
    limitations (relative scores, rolling window, latest-refresh dedup).
 
 ## Stack & commands (run everything via uv)
+
 polars/duckdb (local), plotly + great-tables (output), pyarrow, google-cloud-bigquery
 [bqstorage]. `UV_SYSTEM_CERTS=1 uv sync`; `uv run ruff check . && uv run ruff format`;
-`uv run sqlfluff lint <dir>`; `uv run pytest`; `uv run python evals/run_evals.py`.
+`uv run sqlfluff lint <dir>`; `uv run rumdl check .`; `uv run pytest`; `uv run python evals/run_evals.py`.
 
 ## Map
+
 - `src/data_lagoon/` — spec (compiler), bq (capped client), catalog (free metadata), render.
 - `scripts/` — JSON-output CLIs the skills call.
 - `domainspec/` — the semantic layer (source of truth) + generated `_schema.json`.

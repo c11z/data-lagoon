@@ -14,6 +14,7 @@ Referenced by `bigquery-notebook` and `bigquery-chart` for query-execution guida
 a careful data analyst: surface data and methodology; never invent numbers.
 
 ## Executing queries — priority ladder
+
 1. **Python client (preferred)**: `data_lagoon.bq.capped_query()` (used by the scripts and
    notebooks) — dry-runs then caps automatically.
 2. **CLI fallback**: `bq query --use_legacy_sql=false --maximum_bytes_billed=<bytes> ...`
@@ -22,13 +23,14 @@ a careful data analyst: surface data and methodology; never invent numbers.
    `gcloud auth application-default login` and `gcloud config set project c11z-data-lagoon`,
    then stop.
 
-# Semantic Layer (REQUIRED first step)
+## Semantic Layer (REQUIRED first step)
 
 The DomainSpec is the **mandatory default path** for every data question — joins, grain, and
 filters are baked in. Raw SQL is the **fallback**, used only after the semantic layer is
 shown not to cover the ask.
 
-## Required workflow
+### Required workflow
+
 1. **Load / Discover** — `uv run python scripts/spec_lookup.py --query "<concept>"`. Always
    check **segments** (named population filters) — never hand-roll a `WHERE` for one.
 2. **Compile + run** — compile the metric to SQL, then execute capped:
@@ -38,16 +40,18 @@ shown not to cover the ask.
    ask → write raw SQL using `references/sql-patterns.md`.
 
 > **Don't bail early** to raw SQL on these grounds:
+>
 > - "needs custom date filtering" → use `--last-n-days` / `--start`/`--end` (TimeWindow).
 > - "needs a different grouping" → use `--dimensions`.
 > - "needs a population cut" → use a `--segments` name (add one to the YAML if missing).
 
-## Date windows & timezone — decide before you query
+### Date windows & timezone — decide before you query
+
 - **"Last week/month"** = the last *complete* calendar week/month, **not** trailing 7/30 days.
 - **Freshness**: anchor on `MAX(refresh_date)`, not "today" — partitions settle on refresh.
 - **Timezone**: default UTC. `week` is a Sunday-anchored DATE.
 
-# PART 1 — MUST KNOW (every request)
+## PART 1 — MUST KNOW (every request)
 
 1. **Cost red flags first** (see `references/cost-rules.md`): refuse `SELECT *` on large
    tables and any query missing a partition filter. `LIMIT` does **not** cut cost.
@@ -58,7 +62,7 @@ shown not to cover the ask.
    use safe division; separate observations ("data shows X") from interpretation
    ("this suggests Y"); flag limitations.
 
-# PART 2 — HOW TO (during execution)
+## PART 2 — HOW TO (during execution)
 
 1. **Write** SQL into `analyses/<slug>/queries/<name>.sql` (version-controlled record).
 2. **Lint**: `uv run sqlfluff lint analyses/<slug>/queries/` → fix reported violations →
@@ -73,7 +77,8 @@ shown not to cover the ask.
 6. **Report with a provenance footer** (exact format in `references/data-integrity.md`):
    `> **Source:** … · **Confidence:** … · **Bytes scanned:** … · **Freshness:** … · **Owner:** … · **Reviewed:** …`
 
-# PART 3 — References
+## PART 3 — References
+
 | Topic | File |
 |---|---|
 | Common google_trends SQL patterns | `references/sql-patterns.md` |

@@ -92,6 +92,7 @@ uv run python evals/run_evals.py
 5. `uv run python scripts/check_spec_doc_sync.py` must pass (staleness guard).
 
 ## Deliberate scope cuts (vs. the article)
+
 No lineage tracking (public datasets have no pipelines); no query-corpus retrieval; adversarial
 review deferred (flag-gated placeholder in the query skill); single-surface (no MCP/marketplace
 sync).

@@ -2,18 +2,22 @@
 
 **Category:** Enterprise AI | **Product:** Claude Code | **Date:** June 3, 2026 | **Reading time:** 5 min
 
-**Authors:** Chen Chang, Clement Peng, Justin Leder, Johanne Jiao, and Josh Cherry (Data Science and Data Engineering team), with thanks to Michael Segner.
+**Authors:** Chen Chang, Clement Peng, Justin Leder, Johanne Jiao, and Josh Cherry
+(Data Science and Data Engineering team), with thanks to Michael Segner.
 
 ---
 
-The article opens by noting that enabling self-service business analytics has "traditionally been a slog" for data teams. Denormalized tables lead to
-"overlapping views with inconsistent definitions," while ringfenced environments miss "the long tail of business questions."
+The article opens by noting that enabling self-service business analytics has "traditionally
+been a slog" for data teams. Denormalized tables lead to "overlapping views with inconsistent
+definitions," while ringfenced environments miss "the long tail of business questions."
 
-LLMs offer a new path but can "create a false sense of precision" when pointed at a warehouse without guardrails. The setup "separates stakeholders from the
-underlying infrastructure, documentation, and expertise" that previously guided them.
+LLMs offer a new path but can "create a false sense of precision" when pointed at a warehouse
+without guardrails. The setup "separates stakeholders from the underlying infrastructure,
+documentation, and expertise" that previously guided them.
 
-At Anthropic, "95% of business analytics queries are automated via Claude, with ~95% accuracy in aggregate." This frees the data science team to focus on
-"causal modeling, forecasting, and machine learning."
+At Anthropic, "95% of business analytics queries are automated via Claude, with ~95% accuracy
+in aggregate." This frees the data science team to focus on "causal modeling, forecasting, and
+machine learning."
 
 The post shares best practices from meeting with "dozens of Anthropic's top Claude Code users," covering:
 
@@ -27,19 +31,24 @@ The post shares best practices from meeting with "dozens of Anthropic's top Clau
 
 ## Data is not software
 
-LLMs' generative abilities are described as "a double-edged sword." Coding rewards creativity with "documentation and tests" as natural guardrails. Analytics
-often has "only a single correct answer using a single correct source" with "no deterministic way of proving the correctness."
+LLMs' generative abilities are described as "a double-edged sword." Coding rewards creativity
+with "documentation and tests" as natural guardrails. Analytics often has "only a single
+correct answer using a single correct source" with "no deterministic way of proving the
+correctness."
 
 The central problem is the "ability to map a user's question to specific and up-to-date entities in our data model."
 
 Three attributes account for most inaccurate responses:
 
-1. **Concept <> entity ambiguity**: With hundreds of viable options, the agent can't choose correct fields. Example: what constitutes being "active"? Include
-fraudulent users? What lookback window?
+1. **Concept <> entity ambiguity**: With hundreds of viable options, the agent can't choose
+   correct fields. Example: what constitutes being "active"? Include fraudulent users?
+   What lookback window?
 
-2. **Data staleness**: "data sources, business definitions, and schemas change constantly; assets and agent knowledge go stale."
+2. **Data staleness**: "data sources, business definitions, and schemas change constantly;
+   assets and agent knowledge go stale."
 
-3. **Retrieval failure**: The right information exists but "given the vastness of the search space, the agent simply doesn't find it."
+3. **Retrieval failure**: The right information exists but "given the vastness of the search
+   space, the agent simply doesn't find it."
 
 ---
 
@@ -55,58 +64,73 @@ Each layer attacks one or more failure modes:
 
 Standard practices like "dimensional modeling," shift-left testing, freshness and completeness checks all still apply.
 
-The key shift: "the end user of your data model is no longer a data expert (e.g. data scientist), but rather agents acting on behalf of users." Results
-"can't require the user to validate the underlying correctness."
+The key shift: "the end user of your data model is no longer a data expert (e.g. data
+scientist), but rather agents acting on behalf of users." Results "can't require the user to
+validate the underlying correctness."
 
 Best practices:
 
-- **Create canonical datasets**: "The most common failure is that the agent can't map a concept" to the correct table/column/metric. The fix is "fewer, more
-heavily governed logical models." "Aggressively deprecate the near-duplicates." Physical rollups "should derive mechanically from the canonical models."
+- **Create canonical datasets**: "The most common failure is that the agent can't map a
+  concept" to the correct table/column/metric. The fix is "fewer, more heavily governed
+  logical models." "Aggressively deprecate the near-duplicates." Physical rollups "should
+  derive mechanically from the canonical models."
 
-- **Enforce your standards**: Foundations hold only with enforcement by "tooling," "CI," and "mandate" — downstream teams "build on the governed layer or
-explain why not." "Governance without enforcement otherwise quickly decays."
+- **Enforce your standards**: Foundations hold only with enforcement by "tooling," "CI," and
+  "mandate" — downstream teams "build on the governed layer or explain why not."
+  "Governance without enforcement otherwise quickly decays."
 
-- **Colocate artifacts**: Nearly all data code "lives in a single repo, with CI checks that protect cross-layer integrity." If a modeling change would "break
-a downstream dashboard or invalidate a documented metric, CI flags it."
+- **Colocate artifacts**: Nearly all data code "lives in a single repo, with CI checks that
+  protect cross-layer integrity." If a modeling change would "break a downstream dashboard or
+  invalidate a documented metric, CI flags it."
 
-- **Treat metadata as a first-class product**: The warehouse can be legible if "column and table descriptions, canonical metric definitions, grain
-documentation" and other metadata "are maintained with the same rigor as the transformations."
+- **Treat metadata as a first-class product**: The warehouse can be legible if "column and
+  table descriptions, canonical metric definitions, grain documentation" and other metadata
+  "are maintained with the same rigor as the transformations."
 
 ### Sources of truth
 
 These are "the reference surfaces the agent consults to navigate" the warehouse. In descending order of trust:
 
-- **Semantic layer**: Compiled metric and dimension definitions. Agents are "structurally required" to use it first. An approach that didn't work:
-"bootstrapping the semantic layer by having an LLM auto-generate metric definitions" — it "encoded the very ambiguities we were trying to eliminate."
-Recommendation: "generating the documentation with Claude, but having a human own the definition."
+- **Semantic layer**: Compiled metric and dimension definitions. Agents are "structurally
+  required" to use it first. An approach that didn't work: "bootstrapping the semantic layer
+  by having an LLM auto-generate metric definitions" — it "encoded the very ambiguities we
+  were trying to eliminate." Recommendation: "generating the documentation with Claude, but
+  having a human own the definition."
 
-- **Lineage and the transformation graph**: When the semantic layer doesn't cover a question, lineage lets the agent "reason about which upstream models feed
-a concept." It transforms "'I don't know the metric' into 'I know which governed model to aggregate from.'"
+- **Lineage and the transformation graph**: When the semantic layer doesn't cover a question,
+  lineage lets the agent "reason about which upstream models feed a concept." It transforms
+  "'I don't know the metric' into 'I know which governed model to aggregate from.'"
 
-- **Query corpus**: Historical SQL. "In practice, we found that giving the agent raw retrieval access to thousands of prior queries moved accuracy by less
-than a point." "Unstructured retrieval couldn't map a new question to the right precedent." What works is "distilling that corpus into structured per-domain
-reference docs."
+- **Query corpus**: Historical SQL. "In practice, we found that giving the agent raw retrieval
+  access to thousands of prior queries moved accuracy by less than a point." "Unstructured
+  retrieval couldn't map a new question to the right precedent." What works is "distilling
+  that corpus into structured per-domain reference docs."
 
-- **Business context**: "The layer most teams skip, and the one we underrated the longest." Without it, the agent "will answer what the user asked, but not
-what they meant." They pipe in "a company knowledge graph consisting of indexed docs, roadmaps, decision logs, and our organizational structure."
+- **Business context**: "The layer most teams skip, and the one we underrated the longest."
+  Without it, the agent "will answer what the user asked, but not what they meant." They pipe
+  in "a company knowledge graph consisting of indexed docs, roadmaps, decision logs, and our
+  organizational structure."
 
 The common failure across all four: "poor or stale documentation."
 
 ### Skills
 
-A skill is "procedural knowledge: which sources to consult in what order." In Claude Code, a skill is "a folder of markdown the agent reads on demand."
+A skill is "procedural knowledge: which sources to consult in what order." In Claude Code, a
+skill is "a folder of markdown the agent reads on demand."
 
-"Without skills, Claude's ability to answer analytics questions accurately didn't exceed 21% on our evals. Adding skills gets these numbers consistently
-above 95%."
+"Without skills, Claude's ability to answer analytics questions accurately didn't exceed 21%
+on our evals. Adding skills gets these numbers consistently above 95%."
 
 Best practices:
 
-**Create pairwise skills:** A **knowledge** skill acts as "a thin top-level router" narrowing the space "to a few dozen curated files before a query is ever
-written." The **unbook** skill "encodes the process a senior analyst would follow" and bundles "a dozen reusable analysis patterns."
+**Create pairwise skills:** A **knowledge** skill acts as "a thin top-level router" narrowing
+the space "to a few dozen curated files before a query is ever written." The **unbook** skill
+"encodes the process a senior analyst would follow" and bundles "a dozen reusable analysis
+patterns."
 
 **Create proper reference docs**: Written for LLM retrieval. The article provides a skeleton:
 
-```
+```text
 # [Domain] Tables
 
 ## Quick Reference
@@ -135,32 +159,39 @@ written." The **unbook** skill "encodes the process a senior analyst would follo
 - [Neighboring domain docs that own adjacent questions]
 ```
 
-**Treat skill maintenance as a first class citizen**: They "watched our offline accuracy drift from ~95% at launch to ~65% over a month." The solution:
-"colocating skill markdown files in the same repo as our transformation models." A code-review hook flags model changes without skill updates. "Roughly 90%
-of our data-model PRs now include a skill change."
+**Treat skill maintenance as a first class citizen**: They "watched our offline accuracy drift
+from ~95% at launch to ~65% over a month." The solution: "colocating skill markdown files in
+the same repo as our transformation models." A code-review hook flags model changes without
+skill updates. "Roughly 90% of our data-model PRs now include a skill change."
 
-**Create a consistent experience across surfaces**: "The same skill must provide the same answer" in Slack, IDE, dashboards, and standalone sessions. On
-merge, skills sync to "a plugin marketplace," "cloud-storage blobs," and are "served directly as resources over MCP."
+**Create a consistent experience across surfaces**: "The same skill must provide the same
+answer" in Slack, IDE, dashboards, and standalone sessions. On merge, skills sync to "a plugin
+marketplace," "cloud-storage blobs," and are "served directly as resources over MCP."
 
 ### Validation
 
 #### Offline evaluations
 
-"A common pattern we see is that data teams will set up elaborate analytic environments without having any process to understand the accuracy."
+"A common pattern we see is that data teams will set up elaborate analytic environments
+without having any process to understand the accuracy."
 
-Two kinds at Anthropic: **Dashboard-based evals** (auto-generated by Claude, human validated) and **Long tail evals** (Claude generates plausible questions
-from business context). They also "harvest every time a stakeholder corrects the agent."
+Two kinds at Anthropic: **Dashboard-based evals** (auto-generated by Claude, human validated)
+and **Long tail evals** (Claude generates plausible questions from business context). They also
+"harvest every time a stakeholder corrects the agent."
 
 Best practices:
 
-- **Anchor ground truth**: "Pin every eval to a snapshot date" or "have the grader judge the agent's query rather than its number."
+- **Anchor ground truth**: "Pin every eval to a snapshot date" or "have the grader judge the
+  agent's query rather than its number."
 
-- **Store results like telemetry**: Every run lands in a warehouse table with "skill version, git SHA, model ID, per-assertion pass/fail, token count, and
-wall-clock."
+- **Store results like telemetry**: Every run lands in a warehouse table with "skill version,
+  git SHA, model ID, per-assertion pass/fail, token count, and wall-clock."
 
-- **Gate launches per domain**: Domain owners can't launch "until their slice of the eval set clears some threshold (we initially used ~90%)."
+- **Gate launches per domain**: Domain owners can't launch "until their slice of the eval set
+  clears some threshold (we initially used ~90%)."
 
-- **Create the appropriate number**: "Diminishing returns past a few dozen per topic" and "that ceiling drops with each new model generation."
+- **Create the appropriate number**: "Diminishing returns past a few dozen per topic" and
+  "that ceiling drops with each new model generation."
 
 - **Offline eval accuracy should be ~100%**; every correct answer should hit the semantic layer.
 
@@ -168,32 +199,37 @@ wall-clock."
 
 Structural decisions are made by "holding our offline eval set fixed" and varying "exactly one component."
 
-- **Design for null results**: They gave the agent "direct grep access to our entire dashboard, transformation, and analyst-notebook SQL." "Accuracy moved by
-less than a point in either direction." The information was there, the agent saw it, "and it still didn't use it." This showed "our bottleneck wasn't access
-to prior work, it was structure."
+- **Design for null results**: They gave the agent "direct grep access to our entire dashboard,
+  transformation, and analyst-notebook SQL." "Accuracy moved by less than a point in either
+  direction." The information was there, the agent saw it, "and it still didn't use it." This
+  showed "our bottleneck wasn't access to prior work, it was structure."
 
 - **Ablate at PR granularity**: Every skill edit gets "a before / after run on the relevant eval slice."
 
-- **Keep a short list of what didn't work**: Examples: "stacking additional rounds of doc refinement past a certain point" (three consecutive net-negative
-iterations) and "swapping the adversarial reviewer to a cheaper model."
+- **Keep a short list of what didn't work**: Examples: "stacking additional rounds of doc
+  refinement past a certain point" (three consecutive net-negative iterations) and "swapping
+  the adversarial reviewer to a cheaper model."
 
 #### Online validation
 
-- **Adversarial review**: Employing a skill to "aggressively challenge all underlying assumptions" increased accuracy by 6% but cost "32% more tokens and 72%
-higher latency."
+- **Adversarial review**: Employing a skill to "aggressively challenge all underlying
+  assumptions" increased accuracy by 6% but cost "32% more tokens and 72% higher latency."
 
-- **Provenance footer**: Every response carries source tier, freshness, and model owner. "A 'raw table, freshness unknown' footer is a signal to verify."
+- **Provenance footer**: Every response carries source tier, freshness, and model owner.
+  "A 'raw table, freshness unknown' footer is a signal to verify."
 
 - **Data quality checks**: Basic checks ensuring "the referenced field is up-to-date, complete, and has no anomalies."
 
-- **Passive monitoring**: Two signals tracked: "share of agent queries that resolve through the semantic layer" and "share of responses that use correction
-language."
+- **Passive monitoring**: Two signals tracked: "share of agent queries that resolve through
+  the semantic layer" and "share of responses that use correction language."
 
-- **Active correction harvesting**: A scheduled agent scans channels for corrections, "drafts a one-line fix to the relevant reference doc, and opens a PR."
-Corrections feed back into offline evals.
+- **Active correction harvesting**: A scheduled agent scans channels for corrections, "drafts
+  a one-line fix to the relevant reference doc, and opens a PR." Corrections feed back into
+  offline evals.
 
-The unresolved failure mode: "The answer is wrong, but looks plausible and is used without objection." Mitigations include provenance footers and "explicit
-human sign-off on anything leadership-bound," though they "don't have a robust solution yet."
+The unresolved failure mode: "The answer is wrong, but looks plausible and is used without
+objection." Mitigations include provenance footers and "explicit human sign-off on anything
+leadership-bound," though they "don't have a robust solution yet."
 
 ---
 
@@ -203,22 +239,27 @@ human sign-off on anything leadership-bound," though they "don't have a robust s
 
 Key questions for teams:
 
-- **How important is a correct answer today vs. in the future?** Companies often build "infrastructure to account for current model shortfalls that become
-moot once those models improve."
+- **How important is a correct answer today vs. in the future?** Companies often build
+  "infrastructure to account for current model shortfalls that become moot once those models
+  improve."
 
-- **How do you anticipate business complexity changing?** Some processes may be "overkill" for simple data models with few consumers.
+- **How do you anticipate business complexity changing?** Some processes may be "overkill"
+  for simple data models with few consumers.
 
-- **How technical is the audience?** Data scientists who "can recognize when an answer is incorrect" allow more error tolerance than audiences with "no
-familiarity with the underlying data model."
+- **How technical is the audience?** Data scientists who "can recognize when an answer is
+  incorrect" allow more error tolerance than audiences with "no familiarity with the underlying
+  data model."
 
-- **How much will you spend for improved accuracy?** Processes like "adversarial validation can significantly improve accuracy, but often at a higher cost
-and latency."
+- **How much will you spend for improved accuracy?** Processes like "adversarial validation
+  can significantly improve accuracy, but often at a higher cost and latency."
 
-- **What is your comfort around access controls?** "Agents are often significantly more performant the more context they have" but "broad data access cuts
-against most companies' governance posture."
+- **What is your comfort around access controls?** "Agents are often significantly more
+  performant the more context they have" but "broad data access cuts against most companies'
+  governance posture."
 
-The greatest gains come from "addressing each of the three failure modes: collapsing ambiguity into a single governed answer, making the answer easily
-discoverable, and flagging when either has gone stale."
+The greatest gains come from "addressing each of the three failure modes: collapsing ambiguity
+into a single governed answer, making the answer easily discoverable, and flagging when either
+has gone stale."
 
 ---
 
@@ -228,7 +269,7 @@ discoverable, and flagging when either has gone stale."
 
 The article provides the full skeleton of their main warehouse skill with bracketed placeholders. The complete code block:
 
-```
+```text
 ---
 name: [warehouse-skill]
 version: [x.y.z]
@@ -368,3 +409,4 @@ semantic-layer path is shown not to cover the ask.
 - [Two similarly-named tables report the same metric at different grains — which to use]
 - [Which of two plausible sources is canonical for the headline metric]
 - [… a dozen more hard-won one-liners …]
+```

@@ -1,6 +1,7 @@
 # Data integrity & the provenance footer
 
 ## Integrity rules
+
 - **NEVER**: invent data, columns, or tables; make assertions beyond what the data shows;
   present a relative `score` as if it were absolute search volume.
 - **ALWAYS**: use safe division (`SAFE_DIVIDE(a, b)`); differentiate **observations**
@@ -11,9 +12,10 @@
   position the data can't support.
 
 ## Provenance footer (end every delivered analysis)
+
 Build it with `data_lagoon.render.provenance_footer(...)`. Format:
 
-```
+```text
 > **Source:** semantic layer | curated table | raw exploration ·
 > **Confidence:** high | medium | low ·
 > **Bytes scanned:** <human bytes> (~$<cost>) ·

@@ -49,20 +49,24 @@ failure*. Always look up before you query.
 Route to ONE reference file; do not load them all.
 
 ### google_trends → `references/google_trends.md`
+
 - **Use for**: what's trending / rising in search, by week, by US DMA or by country.
 - **Key tables**: `top_terms`, `top_rising_terms`, `international_top_terms`, `international_top_rising_terms`.
 - **Never**: query without a `refresh_date` partition filter.
 
 ### Any other public dataset (not curated) → `references/dataset-catalog.md`
+
 - Introspect with `bq_list` / `bq_schema` first; there is no semantic layer for it, so
   treat results as **raw exploration** in the provenance footer.
 
 ## When to use / not
+
 - **Use** for "what data do we have", "which table/column/metric", "is X available".
 - **Don't use** to author or execute SQL → `bigquery-query`. For a saved analysis →
   `bigquery-notebook`.
 
 ## References
+
 | Topic | File | When to read |
 |---|---|---|
 | google_trends domain | `references/google_trends.md` | any trends question |

@@ -14,6 +14,7 @@ Subtly-wrong dates are a large class of wrong analytics answers. Apply these con
 - **Timezone**: default UTC. google_trends columns are DATEs (no time component).
 
 ## "What was trending last complete week" — correct shape
+
 ```sql
 -- last complete week = the most recent Sunday-started week that has fully elapsed
 WHERE week = DATE_TRUNC(DATE_SUB(CURRENT_DATE(), INTERVAL 1 WEEK), WEEK(SUNDAY))
