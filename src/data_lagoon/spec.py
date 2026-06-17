@@ -46,12 +46,30 @@ class Table(_Base):
     partition_column: str | None = Field(
         default=None, description="the cost-relevant partition; queries MUST filter it"
     )
+    shard_suffix: str | None = Field(
+        default=None,
+        description=(
+            "for date-SHARDED wildcard tables (e.g. ga_sessions_*): the pseudo-column "
+            "to filter for cost pruning, almost always '_TABLE_SUFFIX'. Filtered with "
+            "YYYYMMDD string literals, not DATE literals. Mutually exclusive with "
+            "partition_column."
+        ),
+    )
     time_column: str | None = Field(
         default=None, description="freshness/recency anchor (often == partition_column)"
     )
     columns: list[Column] = []
     join_keys: list[str] = []
     scope_exclusions: str | None = None
+
+    @model_validator(mode="after")
+    def _one_cost_anchor(self) -> Table:
+        if self.partition_column and self.shard_suffix:
+            raise ValueError(
+                f"table {self.name!r} sets both partition_column and shard_suffix; "
+                "a table is either DATE-partitioned or date-sharded, not both"
+            )
+        return self
 
 
 class Segment(_Base):
@@ -75,6 +93,15 @@ class Metric(_Base):
     grain: str
     description: str
     default_segments: list[str] = []
+    unnest: list[str] = Field(
+        default=[],
+        description=(
+            "ordered UNNEST sources for metrics over REPEATED records (e.g. "
+            '["hits"] or ["hits", "hits.product"]). Each is cross-joined as '
+            "UNNEST(<src>) AS <leaf>, where <leaf> is the last path segment; the "
+            "metric sql, dimensions, and any segments may reference those aliases."
+        ),
+    )
 
 
 class Dataset(_Base):
@@ -224,17 +251,32 @@ def search_dataset(dataset: Dataset, query: str) -> list[dict]:
 
 # --- the compiler -------------------------------------------------------------
 def _time_predicate(table: Table, tw: TimeWindow) -> str:
-    col = tw.column or table.partition_column or table.time_column
+    col = tw.column or table.partition_column or table.shard_suffix or table.time_column
     if not col:
         raise ValueError(
             f"table {table.name!r} has no partition/time column to filter; "
             "set TimeWindow.column explicitly"
         )
+    # Date-sharded wildcard tables prune only on the suffix pseudo-column compared to
+    # YYYYMMDD *string* literals; DATE literals or a function wrapper defeat pruning.
+    if col == table.shard_suffix and tw.column is None:
+        return _shard_predicate(col, tw)
     if tw.last_n_days is not None:
         return f"{col} >= DATE_SUB(CURRENT_DATE(), INTERVAL {tw.last_n_days} DAY)"
     end = tw.end or "CURRENT_DATE()"
     end_sql = "CURRENT_DATE()" if end == "CURRENT_DATE()" else f"DATE '{end}'"
     return f"{col} BETWEEN DATE '{tw.start}' AND {end_sql}"
+
+
+def _shard_predicate(col: str, tw: TimeWindow) -> str:
+    """Cost-pruning filter for a date-sharded table's suffix pseudo-column (YYYYMMDD)."""
+    fmt = "FORMAT_DATE('%Y%m%d', {})"
+    if tw.last_n_days is not None:
+        lower = fmt.format(f"DATE_SUB(CURRENT_DATE(), INTERVAL {tw.last_n_days} DAY)")
+        return f"{col} >= {lower}"
+    start = tw.start.replace("-", "")  # 'YYYY-MM-DD' -> 'YYYYMMDD'
+    end_sql = f"'{tw.end.replace('-', '')}'" if tw.end else fmt.format("CURRENT_DATE()")
+    return f"{col} BETWEEN '{start}' AND {end_sql}"
 
 
 def compile_metric(
@@ -256,10 +298,11 @@ def compile_metric(
     table = dataset.table(metric.table)
     dimensions = list(dimensions or [])
 
-    if table.partition_column and time_window is None:
+    cost_anchor = table.partition_column or table.shard_suffix
+    if cost_anchor and time_window is None:
         raise ValueError(
-            f"table {table.name!r} is partitioned on {table.partition_column!r}; a "
-            "time_window is required so the compiled query cannot full-scan"
+            f"table {table.name!r} is cost-anchored on {cost_anchor!r}; a time_window "
+            "is required so the compiled query cannot full-scan"
         )
 
     # WHERE: time filter (first, for partition pruning) + hygiene + segment predicates.
@@ -278,7 +321,10 @@ def compile_metric(
     select_items = [*dimensions, f"{metric.sql} AS {metric.name}"]
     lines = ["SELECT"]
     lines.append(",\n".join(f"    {item}" for item in select_items))
-    lines.append(f"FROM `{table.name}`")
+    from_line = f"FROM `{table.name}`"
+    for src in metric.unnest:
+        from_line += f", UNNEST({src}) AS {src.rsplit('.', 1)[-1]}"
+    lines.append(from_line)
     if where:
         lines.append("WHERE")
         lines.append(f"    {where[0]}")

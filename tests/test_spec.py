@@ -130,3 +130,81 @@ def test_real_google_trends_spec_loads():
 def test_load_domainspec_directory():
     spec = load_domainspec(config.DOMAINSPEC_DIR)
     assert "google_trends" in {d.name for d in spec.datasets}
+
+
+# --- date-sharded (wildcard) tables -------------------------------------------
+SHARDED = {
+    "name": "ga",
+    "business_context": "sharded demo",
+    "tables": [
+        {
+            "name": "proj.ds.ga_sessions_*",
+            "grain": "one session",
+            "shard_suffix": "_TABLE_SUFFIX",
+            "time_column": "date",
+        }
+    ],
+    "segments": [
+        {"name": "mobile", "sql_predicate": "device.isMobile", "description": "mobile"},
+    ],
+    "metrics": [
+        {
+            "name": "sessions",
+            "table": "proj.ds.ga_sessions_*",
+            "sql": "COUNT(*)",
+            "grain": "session count",
+            "description": "sessions",
+        },
+        {
+            "name": "product_revenue",
+            "table": "proj.ds.ga_sessions_*",
+            "sql": "SUM(product.productRevenue) / 1000000",
+            "grain": "revenue per product",
+            "description": "product revenue",
+            "unnest": ["hits", "hits.product"],
+        },
+    ],
+}
+
+
+def _sharded() -> Dataset:
+    return Dataset.model_validate(SHARDED)
+
+
+def test_partition_and_shard_mutually_exclusive():
+    bad_table = {**SHARDED["tables"][0], "partition_column": "date"}
+    bad = {**SHARDED, "tables": [bad_table]}
+    with pytest.raises(ValueError, match="not both"):
+        Dataset.model_validate(bad)
+
+
+def test_sharded_requires_time_window():
+    with pytest.raises(ValueError, match="time_window is required"):
+        compile_metric(_sharded(), "sessions")
+
+
+def test_sharded_emits_string_suffix_filter():
+    sql = compile_metric(
+        _sharded(), "sessions", time_window=TimeWindow(start="2017-01-01", end="2017-01-31")
+    )
+    # string YYYYMMDD literals on the suffix pseudo-column — not DATE literals
+    assert "_TABLE_SUFFIX BETWEEN '20170101' AND '20170131'" in sql
+    assert "DATE '" not in sql
+
+
+def test_sharded_last_n_days_uses_format_date():
+    sql = compile_metric(_sharded(), "sessions", time_window=TimeWindow(last_n_days=7))
+    assert "_TABLE_SUFFIX >= FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY))" in sql
+
+
+def test_unnest_builds_cross_join_in_from():
+    sql = compile_metric(
+        _sharded(),
+        "product_revenue",
+        dimensions=["product.v2ProductName"],
+        time_window=TimeWindow(start="2017-01-01", end="2017-01-31"),
+    )
+    assert (
+        "FROM `proj.ds.ga_sessions_*`, UNNEST(hits) AS hits, UNNEST(hits.product) AS product" in sql
+    )
+    assert "GROUP BY product.v2ProductName" in sql

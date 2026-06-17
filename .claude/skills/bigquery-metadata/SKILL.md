@@ -54,6 +54,14 @@ Route to ONE reference file; do not load them all.
 - **Key tables**: `top_terms`, `top_rising_terms`, `international_top_terms`, `international_top_rising_terms`.
 - **Never**: query without a `refresh_date` partition filter.
 
+### google_analytics_sample → `references/google_analytics_sample.md`
+
+- **Use for**: web analytics for the Google Merchandise Store — sessions, users, pageviews,
+  bounce rate, traffic sources, device/geo, and ecommerce (transactions, revenue, products).
+- **Key table**: `ga_sessions_*` (date-SHARDED wildcard; one row = one session; nested `hits`).
+- **Never**: query without a `_TABLE_SUFFIX` shard filter (YYYYMMDD strings); never forget
+  revenue is in micros.
+
 ### Any other public dataset (not curated) → `references/dataset-catalog.md`
 
 - Introspect with `bq_list` / `bq_schema` first; there is no semantic layer for it, so
@@ -70,4 +78,5 @@ Route to ONE reference file; do not load them all.
 | Topic | File | When to read |
 |---|---|---|
 | google_trends domain | `references/google_trends.md` | any trends question |
+| google_analytics_sample domain | `references/google_analytics_sample.md` | web/ecommerce analytics question |
 | Non-curated datasets | `references/dataset-catalog.md` | dataset outside the allowlist |

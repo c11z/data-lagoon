@@ -8,6 +8,7 @@ doc. Resolve questions through them first.
 | Dataset | Reference doc | Use for |
 |---|---|---|
 | `google_trends` | `google_trends.md` | trending / rising search terms by week, US DMA or country |
+| `google_analytics_sample` | `google_analytics_sample.md` | web/ecommerce analytics (sessions, revenue, products) for the Merchandise Store |
 
 To expand the allowlist, see the project README ("Add a dataset"): author a
 `domainspec/<name>.yaml`, regenerate the schema, and write a `references/<name>.md`

@@ -1,0 +1,220 @@
+# yaml-language-server: $schema=./_schema.json
+#
+# DomainSpec for bigquery-public-data.google_analytics_sample — the curated semantic layer.
+# Human-owned. Claude may draft prose here, but a human owns every metric/segment.
+# Regenerate the JSON schema with:  uv run python scripts/gen_schema.py
+#
+# DRAFT: metric/segment semantics below were drafted by Claude from canonical GA (Universal
+# Analytics) definitions and the Google Merchandise Store sample. Ratify before relying on
+# them — especially revenue (micros) and the NULL-as-zero conventions (see gotchas).
+name: google_analytics_sample
+location: US
+business_context: >-
+  Google Analytics 360 sample data from the Google Merchandise Store (an ecommerce site),
+  obfuscated. One BigQuery table per day, date-SHARDED as ga_sessions_YYYYMMDD and queried
+  through the ga_sessions_* wildcard. Roughly 2016-08-01 to 2017-08-01. One row = one
+  session, with nested per-hit detail (pageviews, events, products) in the REPEATED `hits`
+  record. Use it for web-analytics questions: sessions, users, pageviews, bounce rate,
+  traffic sources, device/geo splits, and ecommerce (transactions, revenue, products).
+
+tables:
+  - name: bigquery-public-data.google_analytics_sample.ga_sessions_*
+    grain: >-
+      one session (one visit). Unique key is (fullVisitorId, visitId); visitStartTime is a
+      POSIX timestamp. Per-hit detail lives in the REPEATED `hits` array — UNNEST it to drop
+      to hit/pageview/product grain.
+    description: Daily GA360 sessions for the Google Merchandise Store (date-sharded).
+    shard_suffix: _TABLE_SUFFIX # date-sharded wildcard: filter YYYYMMDD suffix for cost
+    time_column: date # STRING 'YYYYMMDD'; visitStartTime is the POSIX-timestamp anchor
+    hygiene_filter: null # none required beyond the mandatory _TABLE_SUFFIX shard filter
+    join_keys: [fullVisitorId, visitId]
+    scope_exclusions: >-
+      customDimensions / customMetrics / adwordsClickInfo / app + screen fields are out of
+      scope for this spec; query them ad hoc via bigquery-query if needed.
+    columns:
+      # --- session identity / time ---
+      - {name: fullVisitorId, dtype: STRING, description: Unique (obfuscated) visitor id}
+      - {name: visitId, dtype: INT64, description: Session id; unique only within a visitor}
+      - {name: visitNumber, dtype: INT64, description: Session ordinal for this visitor (1 = first)}
+      - {name: visitStartTime, dtype: INT64, description: Session start as POSIX seconds}
+      - {name: date, dtype: STRING, description: Session date 'YYYYMMDD' (matches _TABLE_SUFFIX)}
+      - {name: channelGrouping, dtype: STRING, description: "Default Channel Grouping, e.g. Organic Search, Direct"}
+      # --- session totals (per-session rollups; NULL means zero — see gotchas) ---
+      - {name: totals.visits, dtype: INT64, description: "1 for an interaction session, else NULL"}
+      - {name: totals.hits, dtype: INT64, description: Total hits in the session}
+      - {name: totals.pageviews, dtype: INT64, description: Pageviews in the session (NULL if none)}
+      - {name: totals.timeOnSite, dtype: INT64, description: Session duration in seconds (NULL if 0)}
+      - {name: totals.bounces, dtype: INT64, description: "1 if the session bounced, else NULL"}
+      - {name: totals.transactions, dtype: INT64, description: Transactions in the session (NULL if 0)}
+      - {name: totals.totalTransactionRevenue, dtype: INT64, description: "Session revenue in MICROS (divide by 1e6); NULL if none"}
+      - {name: totals.newVisits, dtype: INT64, description: 1 if this was the visitor's first session}
+      # --- traffic source ---
+      - {name: trafficSource.source, dtype: STRING, description: "Referrer source, e.g. google, (direct)"}
+      - {name: trafficSource.medium, dtype: STRING, description: "Medium, e.g. organic, cpc, referral, (none)"}
+      - {name: trafficSource.campaign, dtype: STRING, description: "Campaign name, '(not set)' when absent"}
+      - {name: trafficSource.keyword, dtype: STRING, description: "Keyword (organic/paid), often '(not provided)'"}
+      - {name: trafficSource.isTrueDirect, dtype: BOOL, description: TRUE if a genuine direct/again-direct session}
+      # --- device ---
+      - {name: device.deviceCategory, dtype: STRING, description: "desktop / mobile / tablet"}
+      - {name: device.isMobile, dtype: BOOL, description: TRUE for mobile devices}
+      - {name: device.operatingSystem, dtype: STRING, description: "OS, e.g. Windows, Macintosh, Android"}
+      - {name: device.browser, dtype: STRING, description: "Browser, e.g. Chrome, Safari"}
+      # --- geography ---
+      - {name: geoNetwork.country, dtype: STRING, description: "Country name, e.g. United States"}
+      - {name: geoNetwork.region, dtype: STRING, description: Sub-national region (state/province)}
+      - {name: geoNetwork.city, dtype: STRING, description: City (often '(not set)')}
+      - {name: geoNetwork.continent, dtype: STRING, description: Continent name}
+      # --- hits (REPEATED): UNNEST(hits) to reach these ---
+      - {name: hits.type, dtype: STRING, description: "Hit type, e.g. PAGE, EVENT, TRANSACTION"}
+      - {name: hits.hitNumber, dtype: INT64, description: Sequence of the hit within the session}
+      - {name: hits.page.pagePath, dtype: STRING, description: URL path of the page hit}
+      - {name: hits.page.pageTitle, dtype: STRING, description: Page title}
+      - {name: hits.eventInfo.eventCategory, dtype: STRING, description: Event category (EVENT hits)}
+      - {name: hits.eventInfo.eventAction, dtype: STRING, description: Event action (EVENT hits)}
+      - {name: hits.eCommerceAction.action_type, dtype: STRING, description: "Ecommerce step: '2'=detail, '3'=add-to-cart, '5'=checkout, '6'=purchase"}
+      # --- hits.product (REPEATED within hits): UNNEST(hits), UNNEST(hits.product) ---
+      - {name: hits.product.v2ProductName, dtype: STRING, description: Product name}
+      - {name: hits.product.v2ProductCategory, dtype: STRING, description: Product category}
+      - {name: hits.product.productRevenue, dtype: INT64, description: "Product revenue in MICROS (divide by 1e6); set on purchase hits"}
+      - {name: hits.product.productQuantity, dtype: INT64, description: Units of the product in the hit}
+      - {name: hits.product.productPrice, dtype: INT64, description: "Unit price in MICROS (divide by 1e6)"}
+
+segments:
+  # -- session-level (safe on any metric) --
+  - name: mobile
+    sql_predicate: device.isMobile
+    description: Sessions on mobile devices.
+  - name: desktop
+    sql_predicate: device.deviceCategory = 'desktop'
+    description: Sessions on desktop devices.
+  - name: organic
+    sql_predicate: trafficSource.medium = 'organic'
+    description: Sessions from organic search.
+  - name: paid
+    sql_predicate: trafficSource.medium = 'cpc'
+    description: Sessions from paid search (cost-per-click).
+  - name: direct
+    sql_predicate: channelGrouping = 'Direct'
+    description: Direct-channel sessions.
+  - name: us_sessions
+    sql_predicate: geoNetwork.country = 'United States'
+    description: Sessions from the United States.
+  - name: converted
+    sql_predicate: totals.transactions >= 1
+    description: Sessions with at least one transaction.
+  # -- hits-level: ONLY valid on metrics that UNNEST(hits); will error otherwise --
+  - name: purchase_hits
+    sql_predicate: hits.eCommerceAction.action_type = '6'
+    description: HITS-LEVEL ONLY — purchase-action hits. Use only with hits-unnested metrics.
+  - name: page_hits
+    sql_predicate: hits.type = 'PAGE'
+    description: HITS-LEVEL ONLY — pageview hits. Use only with hits-unnested metrics.
+
+metrics:
+  # --- session grain ---
+  - name: sessions
+    table: bigquery-public-data.google_analytics_sample.ga_sessions_*
+    sql: COUNT(*)
+    grain: count of sessions per grouping dimensions
+    description: Number of sessions (one ga_sessions row = one session).
+    default_segments: []
+  - name: users
+    table: bigquery-public-data.google_analytics_sample.ga_sessions_*
+    sql: COUNT(DISTINCT fullVisitorId)
+    grain: distinct visitors per grouping dimensions
+    description: Distinct users (fullVisitorId).
+    default_segments: []
+  - name: pageviews
+    table: bigquery-public-data.google_analytics_sample.ga_sessions_*
+    sql: SUM(totals.pageviews)
+    grain: total pageviews per grouping dimensions
+    description: Sum of session pageviews.
+    default_segments: []
+  - name: pages_per_session
+    table: bigquery-public-data.google_analytics_sample.ga_sessions_*
+    sql: SAFE_DIVIDE(SUM(totals.pageviews), COUNT(*))
+    grain: average pageviews per session per grouping dimensions
+    description: Mean pageviews per session.
+    default_segments: []
+  - name: bounce_rate
+    table: bigquery-public-data.google_analytics_sample.ga_sessions_*
+    sql: SAFE_DIVIDE(SUM(totals.bounces), COUNT(*))
+    grain: bounced sessions / sessions per grouping dimensions
+    description: Fraction of sessions that bounced (bounces are NULL when 0, so SUM is correct).
+    default_segments: []
+  - name: avg_session_duration
+    table: bigquery-public-data.google_analytics_sample.ga_sessions_*
+    sql: SAFE_DIVIDE(SUM(totals.timeOnSite), COUNT(*))
+    grain: mean session duration (seconds) per grouping dimensions
+    description: Average session duration in seconds.
+    default_segments: []
+  - name: transactions
+    table: bigquery-public-data.google_analytics_sample.ga_sessions_*
+    sql: SUM(totals.transactions)
+    grain: total transactions per grouping dimensions
+    description: Sum of session transactions.
+    default_segments: []
+  - name: transaction_revenue
+    table: bigquery-public-data.google_analytics_sample.ga_sessions_*
+    sql: SAFE_DIVIDE(SUM(totals.totalTransactionRevenue), 1000000)
+    grain: total ecommerce revenue per grouping dimensions
+    description: Session transaction revenue, converted from micros to currency units.
+    default_segments: []
+  - name: ecommerce_conversion_rate
+    table: bigquery-public-data.google_analytics_sample.ga_sessions_*
+    sql: SAFE_DIVIDE(SUM(totals.transactions), COUNT(*))
+    grain: transactions / sessions per grouping dimensions
+    description: Ecommerce conversion rate (transactions per session).
+    default_segments: []
+  # --- hit / product grain (require UNNEST) ---
+  - name: hit_pageviews
+    table: bigquery-public-data.google_analytics_sample.ga_sessions_*
+    sql: COUNTIF(hits.type = 'PAGE')
+    grain: pageview hits per grouping dimensions (e.g. by hits.page.pagePath)
+    description: Pageviews counted at hit grain — group by hits.page.pagePath for top pages.
+    default_segments: []
+    unnest: [hits]
+  - name: product_revenue
+    table: bigquery-public-data.google_analytics_sample.ga_sessions_*
+    sql: SAFE_DIVIDE(SUM(product.productRevenue), 1000000)
+    grain: product revenue per grouping dimensions (e.g. by product.v2ProductName)
+    description: Per-product revenue (micros to currency) — group by product.v2ProductName.
+    default_segments: []
+    unnest: [hits, hits.product]
+  - name: product_qty_sold
+    table: bigquery-public-data.google_analytics_sample.ga_sessions_*
+    sql: SUM(IF(hits.eCommerceAction.action_type = '6', product.productQuantity, 0))
+    grain: units purchased per grouping dimensions (e.g. by product.v2ProductName)
+    description: Quantity sold on purchase hits — group by product.v2ProductName.
+    default_segments: []
+    unnest: [hits, hits.product]
+
+gotchas:
+  - >-
+    Date-SHARDED, not partitioned. Query the ga_sessions_* wildcard and ALWAYS filter
+    _TABLE_SUFFIX with YYYYMMDD STRING literals
+    (WHERE _TABLE_SUFFIX BETWEEN '20170101' AND '20170131'). Wrapping _TABLE_SUFFIX in a
+    function or comparing to DATE literals defeats shard pruning and scans every day.
+  - >-
+    Revenue is stored in MICROS. Divide totals.totalTransactionRevenue,
+    hits.transaction.transactionRevenue, and hits.product.productRevenue by 1,000,000 to get
+    currency units. The compiled revenue metrics already do this.
+  - >-
+    Count/flag totals are NULL, not 0, when the event didn't happen (totals.bounces,
+    totals.transactions, totals.pageviews, totals.timeOnSite). SUM() ignores NULLs (correct
+    for rates like bounce_rate = SUM(bounces)/COUNT(*)); never COUNT() these or treat NULL
+    as a distinct value.
+  - >-
+    `hits` is a REPEATED record (and hits.product is repeated within it). Hit/product
+    metrics must UNNEST(hits) [and UNNEST(hits.product)] — the compiler does this via a
+    metric's `unnest` list. Hits-level segments (purchase_hits, page_hits) only work on
+    hits-unnested metrics and will error on session-level metrics.
+  - >-
+    Session uniqueness is (fullVisitorId, visitId) — visitId alone is NOT globally unique.
+    fullVisitorId counts users; COUNT(*) counts sessions.
+  - >-
+    Static sample window (~2016-08-01 to 2017-08-01). --last-n-days (relative to today)
+    returns nothing; use --start/--end inside that range.
+  - >-
+    This is sampled GA360 data from one store; treat it as a realistic DEMO, not a
+    population. Flag as raw/sample in the provenance footer.
