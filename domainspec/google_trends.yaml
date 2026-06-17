@@ -93,7 +93,11 @@ segments:
     description: Only the top-5 ranked terms.
   - name: nonnull_score
     sql_predicate: score IS NOT NULL
-    description: Drop rows with no relative-interest score (common for low-volume terms).
+    description: >-
+      Drop rows with no relative-interest score. NOTE: score is missing for ~87-98% of rows
+      and is NOT missing-at-random (see gotchas) — this segment yields a biased
+      sub-population skewed toward recent weeks. Required before averaging score, but report
+      it as a caveat.
   - name: country_us
     sql_predicate: country_code = 'US'
     description: International tables only — restrict to the United States.
@@ -140,6 +144,19 @@ gotchas:
     WHERE refresh_date = (SELECT MAX(refresh_date) FROM `...top_terms`). Otherwise rows
     double-count across refreshes.
   - "`rank` is 1..25 (1 = most popular / fastest rising). `score` is relative interest 0-100 and can be NULL."
+  - >-
+    `score` is overwhelmingly NULL and NOT missing-at-random. Validated on the 2026-06-16
+    partition (see analyses/google-trends-validation): NULL rates were 89% (top_terms), 98%
+    (top_rising_terms), 87% (international_top_terms), 93% (international_top_rising_terms).
+    Two independent, compounding drivers: (1) week-recency — older weeks sit near ~90% NULL
+    while the weeks closest to refresh_date drop sharply (latest week ~45% NULL); (2) a
+    strong, NON-monotonic rank effect that persists even within recent weeks (e.g. rank 25
+    is the most-scored bucket, rank 1 is not — so "top terms get scores" is false).
+    Consequence: any score-based metric (avg_score, intl_avg_score) is computed over a
+    biased subset via `nonnull_score` and over-weights recent weeks; never present an avg
+    score without that limitation, and prefer rank/percent_gain when a complete population
+    matters. All non-score columns are 100% populated; region_code/region_name are fully
+    populated (no empty strings) in the validated partition.
   - >-
     top_terms / top_rising_terms are US-only (Designated Market Areas). For other
     countries use international_top_terms / international_top_rising_terms (country_code,
