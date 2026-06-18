@@ -51,8 +51,16 @@ class Table(_Base):
         description=(
             "for date-SHARDED wildcard tables (e.g. ga_sessions_*): the pseudo-column "
             "to filter for cost pruning, almost always '_TABLE_SUFFIX'. Filtered with "
-            "YYYYMMDD string literals, not DATE literals. Mutually exclusive with "
-            "partition_column."
+            "string literals matching shard_format, not DATE literals. Mutually "
+            "exclusive with partition_column."
+        ),
+    )
+    shard_format: str = Field(
+        default="%Y%m%d",
+        description=(
+            "strftime pattern the shard suffix encodes: '%Y%m%d' for daily shards "
+            "(ga_sessions_20170101), '%Y' for yearly tables (tlc_yellow_trips_2015). "
+            "Only meaningful when shard_suffix is set."
         ),
     )
     time_column: str | None = Field(
@@ -258,9 +266,9 @@ def _time_predicate(table: Table, tw: TimeWindow) -> str:
             "set TimeWindow.column explicitly"
         )
     # Date-sharded wildcard tables prune only on the suffix pseudo-column compared to
-    # YYYYMMDD *string* literals; DATE literals or a function wrapper defeat pruning.
+    # *string* literals; DATE literals or a function wrapper defeat pruning.
     if col == table.shard_suffix and tw.column is None:
-        return _shard_predicate(col, tw)
+        return _shard_predicate(col, tw, table.shard_format)
     if tw.last_n_days is not None:
         return f"{col} >= DATE_SUB(CURRENT_DATE(), INTERVAL {tw.last_n_days} DAY)"
     end = tw.end or "CURRENT_DATE()"
@@ -268,14 +276,24 @@ def _time_predicate(table: Table, tw: TimeWindow) -> str:
     return f"{col} BETWEEN DATE '{tw.start}' AND {end_sql}"
 
 
-def _shard_predicate(col: str, tw: TimeWindow) -> str:
-    """Cost-pruning filter for a date-sharded table's suffix pseudo-column (YYYYMMDD)."""
-    fmt = "FORMAT_DATE('%Y%m%d', {})"
+def _shard_predicate(col: str, tw: TimeWindow, shard_format: str) -> str:
+    """Cost-pruning filter for a sharded table's suffix pseudo-column.
+
+    ``shard_format`` is the strftime pattern the suffix encodes ('%Y%m%d' for daily
+    shards, '%Y' for yearly tables); the YYYY-MM-DD window bounds are rendered to that
+    same shape so the literal compares against the real suffix.
+    """
+    from datetime import datetime
+
+    fmt_call = f"FORMAT_DATE('{shard_format}', {{}})"
     if tw.last_n_days is not None:
-        lower = fmt.format(f"DATE_SUB(CURRENT_DATE(), INTERVAL {tw.last_n_days} DAY)")
+        lower = fmt_call.format(f"DATE_SUB(CURRENT_DATE(), INTERVAL {tw.last_n_days} DAY)")
         return f"{col} >= {lower}"
-    start = tw.start.replace("-", "")  # 'YYYY-MM-DD' -> 'YYYYMMDD'
-    end_sql = f"'{tw.end.replace('-', '')}'" if tw.end else fmt.format("CURRENT_DATE()")
+    start = datetime.strptime(tw.start, "%Y-%m-%d").strftime(shard_format)
+    if tw.end:
+        end_sql = f"'{datetime.strptime(tw.end, '%Y-%m-%d').strftime(shard_format)}'"
+    else:
+        end_sql = fmt_call.format("CURRENT_DATE()")
     return f"{col} BETWEEN '{start}' AND {end_sql}"
 
 

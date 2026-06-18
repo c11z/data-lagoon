@@ -1,0 +1,225 @@
+# yaml-language-server: $schema=./_schema.json
+#
+# DomainSpec for bigquery-public-data.new_york_taxi_trips — the curated semantic layer.
+# Human-owned. Claude may draft prose here, but a human owns every metric/segment.
+# Regenerate the JSON schema with:  uv run python scripts/gen_schema.py
+#
+# DRAFT: metric/segment semantics below were drafted by Claude. payment_type and rate_code
+# code values were verified against tlc_yellow_trips_2022 (not invented); the rest follow
+# standard NYC TLC definitions. Ratify before relying on them.
+name: new_york_taxi_trips
+location: US
+business_context: >-
+  NYC Taxi & Limousine Commission (TLC) trip records. Yellow and green taxis carry full fare
+  detail (distance, fares, tips, payment); for-hire vehicles (FHV) are sparse pickups only
+  (no fares). One physical table PER YEAR (e.g. tlc_yellow_trips_2015), queried through the
+  per-service wildcard. Yellow spans 2011-2022, green 2014-2022, FHV 2015-2017 (2023 tables
+  are empty). Use it for ride volume, fares, tipping, distance, and pickup/dropoff zone
+  questions. taxi_zone_geom maps location ids to zone names/boroughs.
+
+tables:
+  - name: bigquery-public-data.new_york_taxi_trips.tlc_yellow_trips_*
+    grain: one completed yellow-taxi trip
+    description: Yellow medallion taxi trips, one table per year (2011-2022).
+    shard_suffix: _TABLE_SUFFIX # year-sharded wildcard; filter the year for cost
+    shard_format: "%Y" # suffix is a 4-digit year, e.g. '2015'
+    time_column: pickup_datetime # TIMESTAMP; NOT a partition — see gotchas
+    hygiene_filter: null # none forced; consider the valid_trip segment for fare analysis
+    join_keys: [pickup_location_id, dropoff_location_id]
+    columns:
+      - {name: vendor_id, dtype: STRING, description: TPEP provider code}
+      - {name: pickup_datetime, dtype: TIMESTAMP, description: Trip start time}
+      - {name: dropoff_datetime, dtype: TIMESTAMP, description: Trip end time}
+      - {name: passenger_count, dtype: INT64, description: Driver-entered passenger count}
+      - {name: trip_distance, dtype: NUMERIC, description: Trip distance in miles (meter)}
+      - {name: rate_code, dtype: STRING, description: "Rate code as 'N.0' string: '1.0'=standard, '2.0'=JFK, '3.0'=Newark, '5.0'=negotiated, '99.0'=unknown"}
+      - {name: payment_type, dtype: STRING, description: "'1'=credit card, '2'=cash, '3'=no charge, '4'=dispute, '0'=unknown"}
+      - {name: fare_amount, dtype: NUMERIC, description: Meter fare in USD (can be 0/negative — dirty)}
+      - {name: extra, dtype: NUMERIC, description: Misc extras/surcharges}
+      - {name: mta_tax, dtype: NUMERIC, description: MTA tax}
+      - {name: tip_amount, dtype: NUMERIC, description: "Tip in USD — card only; cash tips are NOT recorded"}
+      - {name: tolls_amount, dtype: NUMERIC, description: Tolls in USD}
+      - {name: imp_surcharge, dtype: NUMERIC, description: Improvement surcharge}
+      - {name: airport_fee, dtype: NUMERIC, description: Airport pickup fee}
+      - {name: total_amount, dtype: NUMERIC, description: Total charged to passenger in USD}
+      - {name: pickup_location_id, dtype: STRING, description: TLC taxi zone id of pickup (join taxi_zone_geom.zone_id)}
+      - {name: dropoff_location_id, dtype: STRING, description: TLC taxi zone id of dropoff}
+
+  - name: bigquery-public-data.new_york_taxi_trips.tlc_green_trips_*
+    grain: one completed green-taxi (street-hail livery) trip
+    description: Green "boro" taxi trips, one table per year (2014-2022).
+    shard_suffix: _TABLE_SUFFIX
+    shard_format: "%Y"
+    time_column: pickup_datetime
+    hygiene_filter: null
+    join_keys: [pickup_location_id, dropoff_location_id]
+    columns:
+      - {name: pickup_datetime, dtype: TIMESTAMP, description: Trip start time}
+      - {name: dropoff_datetime, dtype: TIMESTAMP, description: Trip end time}
+      - {name: passenger_count, dtype: INT64, description: Driver-entered passenger count}
+      - {name: trip_distance, dtype: NUMERIC, description: Trip distance in miles}
+      - {name: rate_code, dtype: STRING, description: "Rate code as 'N.0' string (see yellow)"}
+      - {name: payment_type, dtype: STRING, description: "'1'=credit card, '2'=cash, etc. (see yellow)"}
+      - {name: fare_amount, dtype: NUMERIC, description: Meter fare in USD}
+      - {name: tip_amount, dtype: NUMERIC, description: "Tip in USD — card only"}
+      - {name: tolls_amount, dtype: NUMERIC, description: Tolls in USD}
+      - {name: ehail_fee, dtype: NUMERIC, description: E-hail fee (green-specific)}
+      - {name: total_amount, dtype: NUMERIC, description: Total charged in USD}
+      - {name: trip_type, dtype: STRING, description: "'1'=street-hail, '2'=dispatch"}
+      - {name: pickup_location_id, dtype: STRING, description: TLC taxi zone id of pickup}
+      - {name: dropoff_location_id, dtype: STRING, description: TLC taxi zone id of dropoff}
+
+  - name: bigquery-public-data.new_york_taxi_trips.tlc_fhv_trips_*
+    grain: one for-hire-vehicle dispatch/pickup (NO fare detail)
+    description: For-hire vehicle trips, one table per year (2015-2017). Sparse — pickups only.
+    shard_suffix: _TABLE_SUFFIX
+    shard_format: "%Y"
+    time_column: pickup_datetime # DATETIME here, not TIMESTAMP
+    hygiene_filter: null
+    join_keys: [location_id]
+    scope_exclusions: >-
+      FHV has no fares, distance, passengers, or dropoff — fare/tip/distance metrics do not
+      apply. Only volume (counts) and pickup zone/borough are available.
+    columns:
+      - {name: pickup_datetime, dtype: DATETIME, description: "Pickup time (DATETIME, not TIMESTAMP)"}
+      - {name: dispatching_base_num, dtype: STRING, description: TLC base license that dispatched the trip}
+      - {name: location_id, dtype: INT64, description: "Pickup zone id (INTEGER — cast to STRING to join taxi_zone_geom)"}
+      - {name: borough, dtype: STRING, description: Pickup borough}
+      - {name: zone, dtype: STRING, description: Pickup zone name}
+      - {name: service_zone, dtype: STRING, description: Service zone}
+
+  - name: bigquery-public-data.new_york_taxi_trips.taxi_zone_geom
+    grain: one TLC taxi zone (263 zones)
+    description: Lookup — taxi zone id to zone name, borough, and boundary polygon. Tiny (~263 rows).
+    join_keys: [zone_id]
+    columns:
+      - {name: zone_id, dtype: STRING, description: TLC zone id (join target for *_location_id)}
+      - {name: zone_name, dtype: STRING, description: "Zone name, e.g. 'JFK Airport'"}
+      - {name: borough, dtype: STRING, description: Borough the zone is in}
+      - {name: zone_geom, dtype: GEOGRAPHY, description: Zone boundary polygon}
+
+segments:
+  - name: valid_trip
+    sql_predicate: fare_amount > 0 AND trip_distance > 0
+    description: Exclude dirty rows (zero/negative fare or zero distance). Use before fare analysis.
+  - name: credit_card
+    sql_predicate: payment_type = '1'
+    description: Card-paid trips. Required for meaningful tip analysis (cash tips unrecorded).
+  - name: cash
+    sql_predicate: payment_type = '2'
+    description: Cash-paid trips.
+  - name: jfk_trips
+    sql_predicate: rate_code = '2.0'
+    description: JFK Airport flat-rate trips (rate_code stored as the string '2.0').
+  - name: multi_passenger
+    sql_predicate: passenger_count > 1
+    description: Trips with more than one passenger.
+  - name: tipped
+    sql_predicate: tip_amount > 0
+    description: Trips with a recorded (card) tip.
+
+metrics:
+  # --- yellow (flagship; full fare detail) ---
+  - name: trips
+    table: bigquery-public-data.new_york_taxi_trips.tlc_yellow_trips_*
+    sql: COUNT(*)
+    grain: count of yellow trips per grouping dimensions
+    description: Number of yellow-taxi trips.
+    default_segments: []
+  - name: avg_fare
+    table: bigquery-public-data.new_york_taxi_trips.tlc_yellow_trips_*
+    sql: AVG(fare_amount)
+    grain: mean meter fare per grouping dimensions
+    description: Average meter fare (USD). Pair with valid_trip to drop dirty rows.
+    default_segments: []
+  - name: avg_total
+    table: bigquery-public-data.new_york_taxi_trips.tlc_yellow_trips_*
+    sql: AVG(total_amount)
+    grain: mean total charged per grouping dimensions
+    description: Average total amount charged (USD), including tip/tolls/surcharges.
+    default_segments: []
+  - name: total_revenue
+    table: bigquery-public-data.new_york_taxi_trips.tlc_yellow_trips_*
+    sql: SUM(total_amount)
+    grain: summed total charged per grouping dimensions
+    description: Total fare revenue (USD).
+    default_segments: []
+  - name: avg_trip_distance
+    table: bigquery-public-data.new_york_taxi_trips.tlc_yellow_trips_*
+    sql: AVG(trip_distance)
+    grain: mean trip distance (miles) per grouping dimensions
+    description: Average trip distance in miles.
+    default_segments: []
+  - name: avg_passengers
+    table: bigquery-public-data.new_york_taxi_trips.tlc_yellow_trips_*
+    sql: AVG(passenger_count)
+    grain: mean passenger count per grouping dimensions
+    description: Average passengers per trip.
+    default_segments: []
+  - name: tip_pct
+    table: bigquery-public-data.new_york_taxi_trips.tlc_yellow_trips_*
+    sql: SAFE_DIVIDE(SUM(tip_amount), SUM(fare_amount))
+    grain: tip as a fraction of fare per grouping dimensions
+    description: Tip as a share of fare. Defaults to card trips since cash tips are unrecorded.
+    default_segments: [credit_card]
+  - name: avg_speed_mph
+    table: bigquery-public-data.new_york_taxi_trips.tlc_yellow_trips_*
+    sql: SAFE_DIVIDE(SUM(trip_distance), SAFE_DIVIDE(SUM(TIMESTAMP_DIFF(dropoff_datetime, pickup_datetime, SECOND)), 3600))
+    grain: fleet miles per hour per grouping dimensions
+    description: Average speed (total miles / total trip-hours). Pair with valid_trip.
+    default_segments: []
+  # --- green ---
+  - name: green_trips
+    table: bigquery-public-data.new_york_taxi_trips.tlc_green_trips_*
+    sql: COUNT(*)
+    grain: count of green trips per grouping dimensions
+    description: Number of green-taxi trips.
+    default_segments: []
+  - name: green_avg_fare
+    table: bigquery-public-data.new_york_taxi_trips.tlc_green_trips_*
+    sql: AVG(fare_amount)
+    grain: mean green meter fare per grouping dimensions
+    description: Average green-taxi meter fare (USD).
+    default_segments: []
+  - name: green_total_revenue
+    table: bigquery-public-data.new_york_taxi_trips.tlc_green_trips_*
+    sql: SUM(total_amount)
+    grain: summed green total charged per grouping dimensions
+    description: Total green-taxi revenue (USD).
+    default_segments: []
+  # --- fhv (volume only) ---
+  - name: fhv_trips
+    table: bigquery-public-data.new_york_taxi_trips.tlc_fhv_trips_*
+    sql: COUNT(*)
+    grain: count of FHV pickups per grouping dimensions
+    description: Number of for-hire-vehicle pickups (no fare detail exists for FHV).
+    default_segments: []
+
+gotchas:
+  - >-
+    NOT partitioned. Tables are sharded by YEAR only (tlc_yellow_trips_2015). Query the
+    per-service wildcard and filter _TABLE_SUFFIX by year ('2015'). A finer time window
+    (month/day) does NOT reduce bytes — the whole matching year table(s) are scanned. To
+    restrict rows within a year add a pickup_datetime predicate, but know it saves no cost.
+  - >-
+    These tables are LARGE (a single year of yellow is 15-47 GiB across all columns). Select
+    only the columns you need; SELECT * or many columns over multiple years will blow the
+    5 GiB cap. Compiled metrics are safe because they scan only the metric + dimension
+    columns.
+  - >-
+    Cash tips are NOT recorded — tip_amount is meaningful only for card trips
+    (payment_type='1'). The tip_pct metric defaults to the credit_card segment for this
+    reason; never compare tipping across payment types.
+  - >-
+    Coded columns are strings. payment_type is '1'/'2'/... and rate_code is a float-style
+    string '1.0'/'2.0'/... (verified on 2022 data). fare_amount/total_amount can be zero or
+    negative (dirty rows) — use the valid_trip segment for fare analysis.
+  - >-
+    FHV is sparse: pickups only, no fares/distance/passengers/dropoff, and pickup_datetime
+    is DATETIME (not TIMESTAMP). Only volume and pickup zone/borough are usable.
+  - >-
+    Zone enrichment needs a join the compiler does not emit: *_location_id -> taxi_zone_geom
+    .zone_id for names/boroughs. FHV location_id is INTEGER (CAST to STRING to join). Group
+    by the raw *_location_id in a compiled metric, then join names in post-processing or raw
+    SQL.
+  - 2023 tables exist but are empty; green starts 2014, FHV covers only 2015-2017.

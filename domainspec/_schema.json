@@ -173,8 +173,14 @@
             }
           ],
           "default": null,
-          "description": "for date-SHARDED wildcard tables (e.g. ga_sessions_*): the pseudo-column to filter for cost pruning, almost always '_TABLE_SUFFIX'. Filtered with YYYYMMDD string literals, not DATE literals. Mutually exclusive with partition_column.",
+          "description": "for date-SHARDED wildcard tables (e.g. ga_sessions_*): the pseudo-column to filter for cost pruning, almost always '_TABLE_SUFFIX'. Filtered with string literals matching shard_format, not DATE literals. Mutually exclusive with partition_column.",
           "title": "Shard Suffix"
+        },
+        "shard_format": {
+          "default": "%Y%m%d",
+          "description": "strftime pattern the shard suffix encodes: '%Y%m%d' for daily shards (ga_sessions_20170101), '%Y' for yearly tables (tlc_yellow_trips_2015). Only meaningful when shard_suffix is set.",
+          "title": "Shard Format",
+          "type": "string"
         },
         "time_column": {
           "anyOf": [

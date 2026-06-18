@@ -62,6 +62,15 @@ Route to ONE reference file; do not load them all.
 - **Never**: query without a `_TABLE_SUFFIX` shard filter (YYYYMMDD strings); never forget
   revenue is in micros.
 
+### new_york_taxi_trips → `references/new_york_taxi_trips.md`
+
+- **Use for**: NYC taxi ride volume, fares, tips, distance, and pickup/dropoff zones —
+  yellow/green (full fares) and FHV (pickups only).
+- **Key tables**: `tlc_yellow_trips_*`, `tlc_green_trips_*`, `tlc_fhv_trips_*` (year-sharded
+  wildcards), `taxi_zone_geom` (zone lookup).
+- **Never**: query without a `_TABLE_SUFFIX` year filter; never `SELECT *` (tables are huge
+  and unpartitioned).
+
 ### Any other public dataset (not curated) → `references/dataset-catalog.md`
 
 - Introspect with `bq_list` / `bq_schema` first; there is no semantic layer for it, so
@@ -79,4 +88,5 @@ Route to ONE reference file; do not load them all.
 |---|---|---|
 | google_trends domain | `references/google_trends.md` | any trends question |
 | google_analytics_sample domain | `references/google_analytics_sample.md` | web/ecommerce analytics question |
+| new_york_taxi_trips domain | `references/new_york_taxi_trips.md` | NYC taxi rides / fares / zones question |
 | Non-curated datasets | `references/dataset-catalog.md` | dataset outside the allowlist |

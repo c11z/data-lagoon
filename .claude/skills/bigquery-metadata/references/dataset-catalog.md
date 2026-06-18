@@ -9,6 +9,7 @@ doc. Resolve questions through them first.
 |---|---|---|
 | `google_trends` | `google_trends.md` | trending / rising search terms by week, US DMA or country |
 | `google_analytics_sample` | `google_analytics_sample.md` | web/ecommerce analytics (sessions, revenue, products) for the Merchandise Store |
+| `new_york_taxi_trips` | `new_york_taxi_trips.md` | NYC taxi ride volume, fares, tips, distance, pickup/dropoff zones |
 
 To expand the allowlist, see the project README ("Add a dataset"): author a
 `domainspec/<name>.yaml`, regenerate the schema, and write a `references/<name>.md`

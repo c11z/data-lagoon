@@ -197,6 +197,21 @@ def test_sharded_last_n_days_uses_format_date():
     assert "_TABLE_SUFFIX >= FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY))" in sql
 
 
+def test_sharded_yearly_format_renders_year_suffix():
+    yearly = {
+        **SHARDED,
+        "tables": [{**SHARDED["tables"][0], "shard_format": "%Y"}],
+        "metrics": [SHARDED["metrics"][0]],
+    }
+    sql = compile_metric(
+        Dataset.model_validate(yearly),
+        "sessions",
+        time_window=TimeWindow(start="2015-06-01", end="2016-08-31"),
+    )
+    # sub-year bounds collapse to whole-year suffixes (tables are not sub-year prunable)
+    assert "_TABLE_SUFFIX BETWEEN '2015' AND '2016'" in sql
+
+
 def test_unnest_builds_cross_join_in_from():
     sql = compile_metric(
         _sharded(),

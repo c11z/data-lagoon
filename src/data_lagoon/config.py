@@ -28,7 +28,11 @@ ON_DEMAND_USD_PER_TIB = 6.25  # approximate BigQuery on-demand price; 1 TiB/mont
 # Datasets that get the full treatment: DomainSpec semantic layer + reference doc +
 # query enablement. The metadata scripts still introspect ANY bigquery-public-data
 # dataset for free (metadata reads scan no bytes) — this only gates curation.
-ALLOWLIST: tuple[str, ...] = ("google_trends", "google_analytics_sample")
+ALLOWLIST: tuple[str, ...] = (
+    "google_trends",
+    "google_analytics_sample",
+    "new_york_taxi_trips",
+)
 
 # --- Repo paths ---------------------------------------------------------------
 # parents[2] of src/data_lagoon/config.py is the repo root (editable install keeps source here).
