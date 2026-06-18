@@ -57,9 +57,10 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "PLR2004"]
 "scripts/**" = ["T201"] # scripts intentionally print JSON to stdout
-# marimo cells use bare trailing expressions as the cell's display value (B018).
-"templates/notebook_template.py" = ["B018"]
-"analyses/**" = ["B018", "F401"]
+# marimo cells use bare trailing expressions as the cell's display value (B018)
+# and marimo's save format ends every cell function with a bare return (PLR1711).
+"templates/notebook_template.py" = ["B018", "PLR1711"]
+"analyses/**" = ["B018", "F401", "PLR1711"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["data_lagoon"]

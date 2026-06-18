@@ -24,15 +24,14 @@ def _():
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
-        # NYC Yellow Taxi — daily trips, 2022
+    mo.md("""
+    # NYC Yellow Taxi — daily trips, 2022
 
-        Each row counted as **one distinct trip** (the ~200K spatiotemporal-key collisions
-        are left in, per the working assumption). Two-phase: extract daily counts once →
-        freeze to parquet → chart locally.
-        """
-    )
+    Each row counted as **one distinct trip** (the ~200K spatiotemporal-key collisions
+    are left in, per the working assumption). Two-phase: extract daily counts once →
+    freeze to parquet → chart locally.
+    """)
+    return
 
 
 @app.cell
@@ -84,7 +83,7 @@ def extract(HARD_GIB, PARQUET_NAME, SOFT_GIB, SQL, mo, nb_dir, pl):
             "Delete the file to force a re-extract."
         )
     status
-    return bytes_scanned, df, parquet_path
+    return bytes_scanned, df
 
 
 @app.cell
@@ -129,7 +128,7 @@ def chart(clean, date):
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0},
     )
     fig  # last bare expression → marimo renders it inline
-    return (fig,)
+    return
 
 
 @app.cell
@@ -145,6 +144,7 @@ def _(bytes_scanned, dropped, mo, provenance_footer):
         f"{footer}\n\n*Each row = one trip (collisions ignored). "
         f"{dropped} dirty/out-of-window dates dropped; December 2022 missing from source.*"
     )
+    return
 
 
 if __name__ == "__main__":
