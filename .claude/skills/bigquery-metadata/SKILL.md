@@ -71,6 +71,15 @@ Route to ONE reference file; do not load them all.
 - **Never**: query without a `_TABLE_SUFFIX` year filter; never `SELECT *` (tables are huge
   and unpartitioned).
 
+### london_bicycles → `references/london_bicycles.md`
+
+- **Use for**: London Santander Cycles bike-share — hire volume, trip duration, station-to-
+  station flows, and station location/capacity. Coverage 2015-01 to 2023-01.
+- **Key tables**: `cycle_hire` (one bike hire; ~83.4M rows, NOT partitioned/sharded),
+  `cycle_stations` (live ~800-station snapshot: lat/long, capacity).
+- **Never**: query in US — these tables are **EU** (pass `location='EU'`); never `SELECT *`
+  (the 9.57 GiB table blows the cap); never assume `bike_model` exists before 2022-09-12.
+
 ### Any other public dataset (not curated) → `references/dataset-catalog.md`
 
 - Introspect with `bq_list` / `bq_schema` first; there is no semantic layer for it, so
@@ -89,4 +98,5 @@ Route to ONE reference file; do not load them all.
 | google_trends domain | `references/google_trends.md` | any trends question |
 | google_analytics_sample domain | `references/google_analytics_sample.md` | web/ecommerce analytics question |
 | new_york_taxi_trips domain | `references/new_york_taxi_trips.md` | NYC taxi rides / fares / zones question |
+| london_bicycles domain | `references/london_bicycles.md` | London bike-share hires / stations question |
 | Non-curated datasets | `references/dataset-catalog.md` | dataset outside the allowlist |

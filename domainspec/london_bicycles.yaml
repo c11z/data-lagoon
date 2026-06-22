@@ -1,0 +1,172 @@
+# yaml-language-server: $schema=./_schema.json
+#
+# DomainSpec for bigquery-public-data.london_bicycles — the curated semantic layer.
+# Human-owned. Claude may draft prose here, but a human owns every metric/segment.
+# Regenerate the JSON schema with:  uv run python scripts/gen_schema.py
+#
+# DRAFT: metric/segment semantics below were drafted by Claude. Coverage dates, bike_model
+# values (CLASSIC / PBSC_EBIKE, populated only from 2022-09-12), and the dirty-row counts
+# (~60k non-positive/null duration, ~230k null start_station_id) were VERIFIED against
+# cycle_hire on 2026-06-22 — not invented. Ratify the metric/segment names before relying.
+name: london_bicycles
+location: EU # <-- NOT US. cycle_hire/cycle_stations live in the EU multi-region; see gotchas.
+business_context: >-
+  Transport for London (TfL) "Santander Cycles" public bike-share hires — the London
+  equivalent of Citi Bike. One physical, UN-partitioned table of ~83.4M individual hires
+  (cycle_hire, 9.57 GiB) plus a tiny ~800-row live snapshot of docking stations
+  (cycle_stations). Use it for hire volume, trip duration, station-to-station flows, and
+  station location/capacity. Coverage is 2015-01-04 through 2023-01-15 and the dataset is no
+  longer updated. Bike model (classic vs e-bike) is only recorded from 2022-09-12 onward.
+
+tables:
+  - name: bigquery-public-data.london_bicycles.cycle_hire
+    grain: one bike hire (a single trip from a start dock to an end dock)
+    description: >-
+      Individual Santander Cycles hires, 2015-01-04 to 2023-01-15 (~83.4M rows, 9.57 GiB).
+      NOT partitioned and NOT sharded — a single physical table.
+    partition_column: null # none — there is NO cost-pruning column; see gotchas
+    shard_suffix: null
+    time_column: start_date # TIMESTAMP; filtering it does NOT reduce bytes (not a partition)
+    hygiene_filter: null # none forced; use the valid_trip segment for duration analysis
+    join_keys: [start_station_id, end_station_id]
+    columns:
+      - {name: rental_id, dtype: INT64, description: Unique hire id (REQUIRED)}
+      - {name: duration, dtype: INT64, description: "Trip duration in SECONDS (can be 0/negative/NULL — dirty)"}
+      - {name: duration_ms, dtype: INT64, description: Same duration in milliseconds (duplicate of duration)}
+      - {name: bike_id, dtype: INT64, description: Physical bike id (use COUNT DISTINCT for fleet size)}
+      - {name: bike_model, dtype: STRING, description: "'CLASSIC' or 'PBSC_EBIKE' — populated ONLY from 2022-09-12; '' or NULL before that"}
+      - {name: start_date, dtype: TIMESTAMP, description: Hire start time (UTC)}
+      - {name: start_station_id, dtype: INT64, description: "Start dock id (join cycle_stations.id); NULL for ~230k early rows"}
+      - {name: start_station_name, dtype: STRING, description: Start dock name (denormalized — usually no join needed)}
+      - {name: end_date, dtype: TIMESTAMP, description: Hire end time (UTC)}
+      - {name: end_station_id, dtype: INT64, description: End dock id (join cycle_stations.id)}
+      - {name: end_station_name, dtype: STRING, description: End dock name (denormalized)}
+      - {name: start_station_logical_terminal, dtype: INT64, description: TfL internal terminal id (rarely needed)}
+      - {name: end_station_logical_terminal, dtype: INT64, description: TfL internal terminal id (rarely needed)}
+      - {name: end_station_priority_id, dtype: INT64, description: TfL internal rebalancing priority (rarely needed)}
+
+  - name: bigquery-public-data.london_bicycles.cycle_stations
+    grain: one docking station (LIVE snapshot, ~800 stations — not a time series)
+    description: >-
+      Current-state snapshot of docking stations: location (lat/long), capacity, and a
+      point-in-time availability reading. Tiny (~80 KiB). The bikes_count/docks_count/
+      nbEmptyDocks fields are a single recent reading, NOT history — do not trend them.
+    partition_column: null
+    shard_suffix: null
+    join_keys: [id]
+    columns:
+      - {name: id, dtype: INT64, description: Station id (join target for cycle_hire start_/end_station_id)}
+      - {name: name, dtype: STRING, description: Station name}
+      - {name: latitude, dtype: FLOAT64, description: Station latitude}
+      - {name: longitude, dtype: FLOAT64, description: Station longitude}
+      - {name: bikes_count, dtype: INT64, description: "Bikes docked right now (snapshot — not historical)"}
+      - {name: docks_count, dtype: INT64, description: Total docks (station capacity)}
+      - {name: nbEmptyDocks, dtype: INT64, description: "Empty docks right now (snapshot)"}
+      - {name: installed, dtype: BOOL, description: Whether the station is installed/active}
+      - {name: locked, dtype: STRING, description: Lock state}
+      - {name: temporary, dtype: BOOL, description: Whether the station is temporary}
+      - {name: terminal_name, dtype: STRING, description: TfL terminal name}
+      - {name: install_date, dtype: DATE, description: Date the station was installed}
+      - {name: removal_date, dtype: DATE, description: Date the station was removed (NULL if active)}
+
+segments:
+  - name: valid_trip
+    sql_predicate: duration > 0 AND start_station_id IS NOT NULL
+    description: Drop dirty rows (zero/negative/NULL duration, missing start station). Use before duration analysis.
+  - name: round_trip
+    sql_predicate: start_station_id = end_station_id
+    description: Hires returned to the same station they started from (leisure/loop pattern).
+  - name: model_recorded
+    sql_predicate: bike_model IN ('CLASSIC', 'PBSC_EBIKE')
+    description: Hires where bike_model is known — only from 2022-09-12 onward. Required for any classic-vs-ebike split.
+  - name: ebike
+    sql_predicate: bike_model = 'PBSC_EBIKE'
+    description: Electric-bike hires (PBSC e-bike). Only exists from 2022-09-14 onward.
+  - name: classic
+    sql_predicate: bike_model = 'CLASSIC'
+    description: Classic (non-electric) bike hires. Model only recorded from 2022-09-12 onward.
+
+metrics:
+  # --- cycle_hire (the flagship trip table) ---
+  - name: hires
+    table: bigquery-public-data.london_bicycles.cycle_hire
+    sql: COUNT(*)
+    grain: count of bike hires per grouping dimensions
+    description: Number of bike hires (trips).
+    default_segments: []
+  - name: avg_duration_min
+    table: bigquery-public-data.london_bicycles.cycle_hire
+    sql: AVG(duration) / 60
+    grain: mean trip duration (minutes) per grouping dimensions
+    description: Average trip duration in minutes. Defaults to valid_trip to exclude dirty/zero durations.
+    default_segments: [valid_trip]
+  - name: total_duration_hours
+    table: bigquery-public-data.london_bicycles.cycle_hire
+    sql: SUM(duration) / 3600
+    grain: summed trip time (hours) per grouping dimensions
+    description: Total time on bikes, in hours. Defaults to valid_trip.
+    default_segments: [valid_trip]
+  - name: unique_bikes
+    table: bigquery-public-data.london_bicycles.cycle_hire
+    sql: COUNT(DISTINCT bike_id)
+    grain: count of distinct physical bikes per grouping dimensions
+    description: Number of distinct bikes seen (fleet size proxy).
+    default_segments: []
+  - name: ebike_share
+    table: bigquery-public-data.london_bicycles.cycle_hire
+    sql: SAFE_DIVIDE(COUNTIF(bike_model = 'PBSC_EBIKE'), COUNTIF(bike_model IN ('CLASSIC', 'PBSC_EBIKE')))
+    grain: e-bike fraction of model-recorded hires per grouping dimensions
+    description: Share of hires that are e-bikes, among hires where the model is known (2022-09-12 on only).
+    default_segments: []
+  # --- cycle_stations (live snapshot; counts are point-in-time) ---
+  - name: stations
+    table: bigquery-public-data.london_bicycles.cycle_stations
+    sql: COUNT(*)
+    grain: count of docking stations per grouping dimensions
+    description: Number of docking stations in the snapshot.
+    default_segments: []
+  - name: total_docks
+    table: bigquery-public-data.london_bicycles.cycle_stations
+    sql: SUM(docks_count)
+    grain: summed dock capacity per grouping dimensions
+    description: Total docking capacity across stations (snapshot).
+    default_segments: []
+  - name: bikes_available
+    table: bigquery-public-data.london_bicycles.cycle_stations
+    sql: SUM(bikes_count)
+    grain: summed available bikes per grouping dimensions
+    description: Bikes currently docked across stations — a single point-in-time reading, not a time series.
+    default_segments: []
+
+gotchas:
+  - >-
+    LOCATION IS EU, NOT US. Both tables live in the EU multi-region while the project default
+    is US. Every dry-run and query MUST pass location='EU' (e.g. bq_dry_run.py --location EU,
+    or capped_query(..., location="EU")); otherwise BigQuery returns a 403 "does not have
+    permission / does not exist". This is the single most common failure on this dataset.
+  - >-
+    cycle_hire is NOT partitioned and NOT sharded — one physical 9.57 GiB table. There is NO
+    cost-pruning column, so filtering start_date does NOT reduce bytes scanned; the whole
+    column is read regardless of date range. Select only the columns you need (compiled
+    metrics are safe — they scan just the metric + dimension columns). SELECT * (~9.6 GiB)
+    exceeds the 5 GiB hard cap. A single TIMESTAMP or INT64 column over 83.4M rows is ~0.7 GiB.
+  - >-
+    bike_model is only populated from 2022-09-12 onward ('CLASSIC' / 'PBSC_EBIKE'). Before
+    that it is '' (2015 to mid-2017) or NULL (2017 to 2022). Classic-vs-ebike analysis is
+    valid ONLY for the last ~4 months of data — always pair it with the model_recorded
+    segment, and never assume model coverage historically. Only ~2.4M of 83.4M rows have a model.
+  - >-
+    Dirty rows: duration (SECONDS) can be 0, negative, or NULL (~60k rows); start_station_id
+    is NULL for ~230k early (2015-2017) rows. Use the valid_trip segment before any duration
+    analysis. duration_ms is just duration in milliseconds (redundant).
+  - >-
+    Coverage is 2015-01-04 to 2023-01-15 and the dataset is no longer updated — treat
+    "latest" as January 2023, not today. Freshness anchor for the provenance footer is
+    MAX(start_date).
+  - >-
+    cycle_stations is a LIVE snapshot, not history: bikes_count / nbEmptyDocks / locked
+    reflect one recent point in time. Use it for station location (lat/long), capacity
+    (docks_count), and id->name lookups — never to trend availability over time. Station
+    names are already denormalized into cycle_hire (start_station_name/end_station_name), so
+    join cycle_stations only when you need coordinates or capacity. The compiler emits no
+    joins — group by *_station_id in a compiled metric, then join names/coords afterward.

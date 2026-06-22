@@ -32,6 +32,7 @@ ALLOWLIST: tuple[str, ...] = (
     "google_trends",
     "google_analytics_sample",
     "new_york_taxi_trips",
+    "london_bicycles",
 )
 
 # --- Repo paths ---------------------------------------------------------------
