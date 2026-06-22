@@ -40,8 +40,7 @@ gcloud config set project c11z-data-lagoon
 cd terraform && terraform init && terraform apply
 ```
 
-> **Note on this machine:** it's Santa-managed. `uv`/`terraform` must be allowlisted (already
-> synced). Run everything via `uv run` so tools come from the pinned project venv. If you see
+> **Note:** Run everything via `uv run` so tools come from the pinned project venv. If you see
 > SSL errors from uv, prefix `UV_SYSTEM_CERTS=1`.
 
 ## Everyday use
