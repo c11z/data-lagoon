@@ -75,8 +75,9 @@ uv run python evals/run_evals.py
   check, and freeze to `data/*.parquet`. Analysis cells read only the parquet — structurally
   unable to re-bill.
 - **`capped_query()`** dry-runs first and sets `maximum_bytes_billed` (default soft 1 GiB warn
-  / hard 5 GiB fail). `LIMIT` does **not** reduce cost; `SELECT *` is forbidden; every
-  google_trends query must filter `refresh_date`.
+  / hard 5 GiB fail). `LIMIT` does **not** reduce cost; `SELECT *` is forbidden; every query
+  must filter the table's declared partition/shard column when it has one (e.g. google_trends →
+  `refresh_date`, year-sharded tables → `_TABLE_SUFFIX`).
 - **Exfil prudence**: return aggregates + SQL, never dump raw rows.
 - **Terraform**: least-privilege IAM (`jobUser` + scratch-only `dataEditor`), auto-expiring
   scratch tables, optional budget alert (`create_budget`, off by default).

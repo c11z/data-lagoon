@@ -12,8 +12,10 @@ relevant SKILL.md before acting.
 2. **Semantic layer first.** If a metric/segment exists, compile it (`--compile`); never
    hand-roll a `WHERE` for a population that has a named segment.
 3. **Cost guardrails, always.** Dry-run (`scripts/bq_dry_run.py`) before executing; run only
-   through `data_lagoon.bq.capped_query()` (sets `maximum_bytes_billed`). Every google_trends
-   query MUST filter `refresh_date`. `LIMIT` does not reduce cost; `SELECT *` is forbidden.
+   through `data_lagoon.bq.capped_query()` (sets `maximum_bytes_billed`). Every query MUST
+   filter the table's declared partition/shard column when it has one (the DomainSpec records
+   it per table — e.g. google_trends → `refresh_date`, year-sharded tables → `_TABLE_SUFFIX`).
+   `LIMIT` does not reduce cost; `SELECT *` is forbidden.
 4. **Two-phase notebooks.** Analyses are marimo notebooks that extract **once** to parquet
    (file-existence guard) and analyze locally. Never put a BigQuery call in a phase-2 cell.
 5. **Exfil prudence.** Return aggregates + the SQL; don't dump large raw result sets.
@@ -21,7 +23,8 @@ relevant SKILL.md before acting.
 7. **Humans own metric definitions.** Draft prose for `domainspec/*.yaml`, but don't invent
    metric/segment semantics.
 8. **No invented data.** Use `SAFE_DIVIDE`; separate observations from interpretation; flag
-   limitations (relative scores, rolling window, latest-refresh dedup).
+   dataset-specific limitations the DomainSpec calls out (e.g. relative scores, rolling
+   windows, latest-refresh dedup, sampled sessions).
 
 ## Stack & commands (run everything via uv)
 
