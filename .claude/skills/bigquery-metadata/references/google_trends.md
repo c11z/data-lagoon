@@ -75,7 +75,7 @@ None is mandatory beyond the **required** `refresh_date` partition filter. Add
   --dimensions term --segments top_10 --last-n-days 7 --limit 20 --compile`
 - For a clean weekly ranking, combine the partition filter with the latest-refresh dedup
   (see `bigquery-query/references/sql-patterns.md`).
-- Freshness anchor for the provenance footer: `MAX(refresh_date)`.
+- Freshness anchor: `MAX(refresh_date)`.
 
 ## Cross-References
 

@@ -1,4 +1,4 @@
-# Data integrity & the provenance footer
+# Data integrity
 
 ## Integrity rules
 
@@ -10,21 +10,3 @@
 - **Out of scope** → say so, don't guess: requests for non-public/PII data, pipeline
   troubleshooting, or product/pricing recommendations. Surface the data; don't take a
   position the data can't support.
-
-## Provenance footer (end every delivered analysis)
-
-Build it with `data_lagoon.render.provenance_footer(...)`. Format:
-
-```text
-> **Source:** semantic layer | curated table | raw exploration ·
-> **Confidence:** high | medium | low ·
-> **Bytes scanned:** <human bytes> (~$<cost>) ·
-> **Freshness:** MAX(refresh_date) = <date> ·
-> **Owner:** Google (bigquery-public-data.google_trends) ·
-> **Reviewed:** N/A — adversarial reviewer disabled
-```
-
-- **Source** tier reflects trust: a compiled metric = "semantic layer"; a curated table
-  queried directly = "curated table"; a non-allowlisted dataset = "raw exploration".
-- A `raw exploration, freshness unknown` footer is a signal to **verify before forwarding** —
-  the one cheap mitigation for the unsolved silent-failure mode.

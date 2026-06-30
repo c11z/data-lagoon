@@ -23,7 +23,7 @@ just no semantic layer, so:
 
 - Discover: `uv run python scripts/bq_list.py` (all) or `--dataset <id> --with-size`.
 - Inspect: `uv run python scripts/bq_schema.py --table bigquery-public-data.<dataset>.<table>`.
-- Treat any answer as **raw exploration** in the provenance footer (lower confidence).
+- Treat any answer as **raw exploration** (lower confidence).
 - Be extra careful with cost: large public tables (e.g. `github_repos`, `wikipedia`,
   `crypto_*`) can scan terabytes. Always `bq_dry_run.py` first and keep the hard cap on.
 

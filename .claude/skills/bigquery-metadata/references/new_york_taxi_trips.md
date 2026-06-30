@@ -66,7 +66,7 @@ trip_distance > 0`) to drop dirty rows.
   `... --metric fhv_trips --dimensions borough --start 2016-01-01 --end 2016-12-31 --compile`
 - Zone names: compile grouped by `pickup_location_id`, then join `taxi_zone_geom` in
   post-processing (the compiler does not emit joins).
-- Freshness anchor for the provenance footer: `MAX(pickup_datetime)` within the year.
+- Freshness anchor: `MAX(pickup_datetime)` within the year.
 
 ## Cross-References
 

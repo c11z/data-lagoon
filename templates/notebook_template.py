@@ -45,7 +45,6 @@ def _():
     import polars as pl
 
     from data_lagoon import config
-    from data_lagoon.render import provenance_footer
     from data_lagoon.spec import TimeWindow, compile_metric, load_dataset
 
     return (
@@ -55,7 +54,6 @@ def _():
         config,
         load_dataset,
         pl,
-        provenance_footer,
     )
 
 
@@ -142,19 +140,6 @@ def table(df):
         columns="avg_score", decimals=1
     )
     return (GT,)
-
-
-@app.cell
-def _(bytes_scanned, dataset, mo, provenance_footer):
-    source = "semantic layer"
-    footer = provenance_footer(
-        source=source,
-        confidence="medium",
-        bytes_scanned=bytes_scanned,
-        freshness="anchor on MAX(refresh_date) — see queries/",
-        owner="Google (bigquery-public-data.google_trends)",
-    )
-    mo.md(footer)
 
 
 if __name__ == "__main__":

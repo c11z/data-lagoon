@@ -7,7 +7,7 @@ Subtly-wrong dates are a large class of wrong analytics answers. Apply these con
 - **As-of vs trailing-N**: state which you used. Trailing windows on google_trends should
   filter `refresh_date` (the partition), e.g. `refresh_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)`.
 - **Freshness**: anchor on `MAX(refresh_date)`, never "yesterday". Some refreshes land late;
-  report the actual `MAX(refresh_date)` in the provenance footer.
+  report the actual `MAX(refresh_date)`.
 - **`week` vs `refresh_date`**: `week` is the Sunday the ranking is *about*; `refresh_date`
   is when Google *published* it (and the partition column). Filter `refresh_date` for cost;
   group/report by `week` for analysis.

@@ -70,7 +70,7 @@ start_station_id IS NOT NULL`) to drop dirty rows.
 - Station coordinates/capacity: compile grouped by `start_station_id`, then join
   `cycle_stations` (id → latitude/longitude/docks_count) in post-processing — the compiler
   emits no joins.
-- Freshness anchor for the provenance footer: `MAX(start_date)` (≈ 2023-01-15).
+- Freshness anchor: `MAX(start_date)` (≈ 2023-01-15).
 
 ## Cross-References
 

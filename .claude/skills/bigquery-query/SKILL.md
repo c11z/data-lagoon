@@ -74,8 +74,6 @@ shown not to cover the ask.
 5. **Adversarial review** *(disabled by default — deviation from the article's "mandatory")*.
    To enable later, spawn a reviewer sub-agent to refute the query's assumptions before the
    answer; correctness today rests on lint + dry-run + the hard cap.
-6. **Report with a provenance footer** (exact format in `references/data-integrity.md`):
-   `> **Source:** … · **Confidence:** … · **Bytes scanned:** … · **Freshness:** … · **Owner:** … · **Reviewed:** …`
 
 ## PART 3 — References
 
@@ -84,4 +82,4 @@ shown not to cover the ask.
 | Common google_trends SQL patterns | `references/sql-patterns.md` |
 | Cost rules & guardrails | `references/cost-rules.md` |
 | Date / timezone conventions | `references/date-conventions.md` |
-| Data integrity + provenance footer | `references/data-integrity.md` |
+| Data integrity | `references/data-integrity.md` |

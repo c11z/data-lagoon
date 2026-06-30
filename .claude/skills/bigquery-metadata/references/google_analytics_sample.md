@@ -74,8 +74,8 @@ None beyond the **required** shard filter on `_TABLE_SUFFIX` (see Gotchas).
 - Top products by revenue (hits/product grain, auto-UNNEST):
   `... --metric product_revenue --dimensions product.v2ProductName --start 2017-07-01
   --end 2017-07-31 --compile`
-- Freshness anchor for the provenance footer: `MAX(date)` (or the latest shard suffix).
-- Treat results as **raw/sample** in the provenance footer (sampled GA360 demo data).
+- Freshness anchor: `MAX(date)` (or the latest shard suffix).
+- Treat results as **raw/sample** (sampled GA360 demo data).
 
 ## Cross-References
 

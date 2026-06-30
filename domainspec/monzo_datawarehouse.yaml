@@ -1,0 +1,165 @@
+# yaml-language-server: $schema=./_schema.json
+
+name: monzo_datawarehouse
+location: US
+business_context: >-
+  Monzo (UK challenger bank) analytics take-home dataset: account lifecycle plus daily
+  transaction activity, all keyed on a hashed account id. Four small, un-partitioned tables —
+  three event logs (account_created, account_closed, account_reopened) and one daily activity
+  panel (account_transactions, one row per account per day that had ≥1 transaction).
+  Coverage is 2017-08-10 → 2020-08-12 and the data is a STATIC August-2020 snapshot, not live.
+  Ids are hashed; there is no PII, amount, or merchant data — only counts.
+
+tables:
+  - name: analytics-take-home-test.monzo_datawarehouse.account_created
+    grain: one account-creation event (one row per account)
+    description: >-
+      Account openings, 2017-08-10 → 2020-08-12 (12,000 rows). One row per account:
+      account_id_hashed, user_id_hashed, and account_type are each distinct per row, so in
+      THIS dataset account_id ↔ user_id is 1:1 (12,000 accounts = 12,000 users). Tiny
+      (~2.3 MiB), NOT partitioned.
+    partition_column: null
+    shard_suffix: null
+    time_column: created_ts
+    hygiene_filter: null
+    join_keys: [account_id_hashed]
+    columns:
+      - {
+          name: created_ts,
+          dtype: TIMESTAMP,
+          description: Account creation time (UTC),
+        }
+      - {
+          name: account_type,
+          dtype: STRING,
+          description: "'uk_retail', 'uk_retail_pot', 'uk_retail_joint', or NULL",
+        }
+      - {
+          name: account_id_hashed,
+          dtype: STRING,
+          description: Hashed account id — the join key across all four tables,
+        }
+      - {
+          name: user_id_hashed,
+          dtype: STRING,
+          description: "Hashed user id; 1:1 with account_id_hashed here (cannot roll accounts up to users in this snapshot). Only present on this table",
+        }
+
+  - name: analytics-take-home-test.monzo_datawarehouse.account_closed
+    grain: one account-closure EVENT (NOT unique per account — an account can close more than once)
+    description: >-
+      Account closures, 2018-01-10 → 2020-08-12 (4,013 rows over 3,909 distinct accounts → 104
+      repeat-closure rows). Every closed account exists in account_created.
+    partition_column: null
+    shard_suffix: null
+    time_column: closed_ts
+    hygiene_filter: null
+    join_keys: [account_id_hashed]
+    columns:
+      - {
+          name: closed_ts,
+          dtype: TIMESTAMP,
+          description: Account closure time (UTC),
+        }
+      - {
+          name: account_id_hashed,
+          dtype: STRING,
+          description: Hashed account id,
+        }
+
+  - name: analytics-take-home-test.monzo_datawarehouse.account_reopened
+    grain: one account-reopen event (7 rows, 7 distinct accounts)
+    description: >-
+      Account reopenings, 2019-07-10 → 2020-07-07 (only 7 rows). Every reopened account exists
+      in account_closed. Far fewer reopens (7) than repeat closures (104) — closure history is
+      not internally consistent.
+    partition_column: null
+    shard_suffix: null
+    time_column: reopened_ts
+    hygiene_filter: null
+    join_keys: [account_id_hashed]
+    columns:
+      - {
+          name: reopened_ts,
+          dtype: TIMESTAMP,
+          description: Account reopen time (UTC),
+        }
+      - {
+          name: account_id_hashed,
+          dtype: STRING,
+          description: Hashed account id,
+        }
+
+  - name: analytics-take-home-test.monzo_datawarehouse.account_transactions
+    grain: one account-day with ≥1 transaction (UNIQUE on (date, account_id_hashed))
+    description: >-
+      Daily transaction counts per account, 2017-08-11 → 2020-08-12 (308,083 rows, 4,327
+      distinct accounts; ~31 MiB). UNIQUE on (date, account_id_hashed) — a SPARSE panel: a
+      missing (account, day) means zero transactions that day, NOT missing data. Only 4,327 of
+      12,000 accounts ever appear (Pots rarely transact).
+    partition_column: null
+    shard_suffix: null
+    time_column: date
+    hygiene_filter: null
+    join_keys: [account_id_hashed]
+    columns:
+      - { name: date, dtype: DATE, description: Activity date }
+      - {
+          name: account_id_hashed,
+          dtype: STRING,
+          description: Hashed account id,
+        }
+      - {
+          name: transactions_num,
+          dtype: INT64,
+          description: "Transactions that day; always ≥ 1 (no zero rows), capped/clipped at 1000)",
+        }
+
+# No semantic-layer metrics or segments are defined yet. The headline population
+# ("active accounts") is human-owned and needs a time-windowed join the compiler
+# does not emit (see gotchas), so nothing is safe to compile here today. Kept as
+# explicit empty lists (not omitted) to match the other curated specs and to make
+# `spec_lookup.py --query` report an empty layer rather than crash. Populate once
+# a human ratifies the metric/segment definitions.
+segments: []
+
+metrics: []
+
+gotchas:
+  - >-
+    NO partition or shard column on ANY table. account_transactions.date is a plain DATE, not
+    a partition, so filtering it does NOT reduce bytes scanned. This is fine: every table is
+    tiny (account_transactions ≈ 31 MiB, the rest < 3 MiB), so a full scan is far under the
+    1 GiB soft cap.
+  - >-
+    account_transactions is a SPARSE daily panel: grain is one (account, day) with ≥1
+    transaction (VERIFIED unique on (date, account_id_hashed); 308,083 rows = 308,083 distinct
+    pairs). A missing (account, day) means ZERO transactions that day, not missing data — when
+    building a continuous daily series, left-join a calendar/account spine and fill absent days
+    with 0; do not assume one row per account per calendar day. transactions_num is always ≥ 1
+    (min 1, no NULLs/zeros) and maxes at exactly 1000 (suspiciously round — likely capped).
+  - >-
+    account_closed is one closure EVENT, not one account: 4,013 rows for 3,909 distinct
+    accounts (104 repeat-closure rows), yet only 7 reopen events exist — so closure history is
+    NOT internally consistent (more re-closures than recorded reopens). For "is this account
+    closed / when" dedupe to one closure per account (per-account MIN or MAX closed_ts).
+  - >-
+    account_id_hashed is the join key across all four tables and referential integrity is clean
+    (VERIFIED zero orphans: every closed/reopened/transacting account exists upstream —
+    closed ⊆ created, reopened ⊆ closed, transacting ⊆ created). user_id_hashed exists ONLY on
+    account_created and is 1:1 with account_id_hashed here (12,000 = 12,000), so you cannot
+    aggregate multiple accounts to a user in this snapshot despite the column. This is an artifact
+    of the hashing process and we should still treat the data as if the relationship between
+    user_id_hashed and account_id_hashed is 1:Many.
+  - >-
+    account_type (account_created only) — VERIFIED values: uk_retail (4,554), uk_retail_pot
+    (7,042), uk_retail_joint (402), NULL (2). "Pots" are savings sub-accounts: they dominate
+    account counts but rarely transact, so only 4,327 of 12,000 accounts ever appear in
+    account_transactions. "Number of accounts" and "number of transacting accounts" differ
+    ~3× — always be explicit about which population a metric targets. Coalsce NULL account_type
+    to 'unknown' before splitting by type.
+  - >-
+    STATIC snapshot: coverage is created 2017-08-10 → 2020-08-12, transactions 2017-08-11 →
+    2020-08-12, closures 2018-01-10 → 2020-08-12, reopens 2019-07-10 → 2020-07-07; tables last
+    modified 2020-08-12. Treat "now"/"latest" as 2020-08-12, not today. Freshness anchor for
+    the provenance footer is MAX(date) on account_transactions (or MAX of the relevant *_ts).

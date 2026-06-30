@@ -11,7 +11,7 @@ allowed-tools: Bash(uv run:*), Read, Write
 # BigQuery Notebook — the persistent analysis record ("unbook")
 
 Encodes the senior-analyst process as a marimo notebook: clarify → find the source (via
-`bigquery-metadata`) → extract once → analyze → chart/table → provenance footer. The
+`bigquery-metadata`) → extract once → analyze → chart/table. The
 notebook `.py` + frozen parquet + saved `.sql` are the durable record of the conversation.
 
 ## The two-phase convention (billing safety — non-negotiable)
@@ -36,8 +36,7 @@ Read `references/marimo-cells.md` before editing cells.
    only if the parquet is missing (it dry-runs and caps via `capped_query()`).
 4. **Save the SQL** the notebook compiled into `queries/` and lint it
    (`uv run sqlfluff lint analyses/<date>-<slug>/queries/`).
-5. **End with the provenance footer** (already wired in the template's last cell).
-6. **Share**: `uv run marimo export html analyses/<date>-<slug>/notebook.py` for a static record.
+5. **Share**: `uv run marimo export html analyses/<date>-<slug>/notebook.py` for a static record.
 
 ## To force a fresh extract
 

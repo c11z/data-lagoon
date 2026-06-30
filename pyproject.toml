@@ -39,6 +39,13 @@ packages = ["src/data_lagoon"]
 default-groups = ["dev"]
 
 # ---------------------------------------------------------------------------
+# marimo — global notebook styling (Roboto / Roboto Mono), injected into every
+# notebook and HTML export. Path is relative to this pyproject.toml.
+# ---------------------------------------------------------------------------
+[tool.marimo.display]
+custom_css = ["marimo-custom.css"]
+
+# ---------------------------------------------------------------------------
 # ruff — Python linter + formatter (run: uv run ruff check --fix . && uv run ruff format .)
 # ---------------------------------------------------------------------------
 [tool.ruff]

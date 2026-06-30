@@ -19,10 +19,9 @@ relevant SKILL.md before acting.
 4. **Two-phase notebooks.** Analyses are marimo notebooks that extract **once** to parquet
    (file-existence guard) and analyze locally. Never put a BigQuery call in a phase-2 cell.
 5. **Exfil prudence.** Return aggregates + the SQL; don't dump large raw result sets.
-6. **Provenance footer** on every delivered analysis (`render.provenance_footer`).
-7. **Humans own metric definitions.** Draft prose for `domainspec/*.yaml`, but don't invent
+6. **Humans own metric definitions.** Draft prose for `domainspec/*.yaml`, but don't invent
    metric/segment semantics.
-8. **No invented data.** Use `SAFE_DIVIDE`; separate observations from interpretation; flag
+7. **No invented data.** Use `SAFE_DIVIDE`; separate observations from interpretation; flag
    dataset-specific limitations the DomainSpec calls out (e.g. relative scores, rolling
    windows, latest-refresh dedup, sampled sessions).
 

@@ -80,10 +80,20 @@ Route to ONE reference file; do not load them all.
 - **Never**: query in US — these tables are **EU** (pass `location='EU'`); never `SELECT *`
   (the 9.57 GiB table blows the cap); never assume `bike_model` exists before 2022-09-12.
 
+### monzo_datawarehouse → `references/monzo_datawarehouse.md`
+
+- **Use for**: Monzo (UK bank) account lifecycle + daily transaction activity — account
+  growth, closures/churn, reactivation, and counting/forecasting "active" accounts.
+- **Key tables**: `account_created`/`account_closed`/`account_reopened` (one event/row),
+  `account_transactions` (one (account, day) with ≥1 txn — a sparse panel).
+- **Never**: treat it as public data — it's in the `analytics-take-home-test` project (query
+  in **US**, not EU; `bq_list` won't find it). Never assume `account_transactions` has a row
+  per account per calendar day (absent day = zero). "Active accounts" is a human definition.
+
 ### Any other public dataset (not curated) → `references/dataset-catalog.md`
 
 - Introspect with `bq_list` / `bq_schema` first; there is no semantic layer for it, so
-  treat results as **raw exploration** in the provenance footer.
+  treat results as **raw exploration**.
 
 ## When to use / not
 
@@ -99,4 +109,5 @@ Route to ONE reference file; do not load them all.
 | google_analytics_sample domain | `references/google_analytics_sample.md` | web/ecommerce analytics question |
 | new_york_taxi_trips domain | `references/new_york_taxi_trips.md` | NYC taxi rides / fares / zones question |
 | london_bicycles domain | `references/london_bicycles.md` | London bike-share hires / stations question |
+| monzo_datawarehouse domain | `references/monzo_datawarehouse.md` | Monzo accounts / closures / transactions / active-account question |
 | Non-curated datasets | `references/dataset-catalog.md` | dataset outside the allowlist |
