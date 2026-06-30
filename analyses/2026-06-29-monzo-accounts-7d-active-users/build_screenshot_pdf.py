@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["beautifulsoup4", "plotly", "websocket-client", "pymupdf"]
+# dependencies = ["beautifulsoup4", "pillow", "plotly", "websocket-client", "pymupdf"]
 # ///
 """Render the whole notebook (code cells + outputs) as ONE tall single-page PDF.
 
@@ -52,6 +52,15 @@ OUT = HERE / "out"
 OUT.mkdir(exist_ok=True)
 PNG = OUT / "notebook_screenshot.png"
 PDF = OUT / "notebook_screenshot.pdf"
+
+# Capture at 3x CSS resolution for crisp text. A PDF page must stay within the
+# 200-inch (14400 pt) format limit, else viewers rescale the oversized page and it
+# looks fuzzy — so the page is capped just under that and the full-res image embedded.
+SCALE = 3
+MAX_PAGE_PT = 14000.0
+# Chrome silently caps screenshot height (~38k px); capture in bands this tall (CSS px,
+# pre-scale) and stitch, so a tall notebook never goes blank at the bottom.
+BAND_CSS = 4000
 
 
 def _chrome() -> str:
@@ -145,16 +154,23 @@ def main() -> None:
         import fitz
 
         pix = fitz.Pixmap(str(PNG))
-        w, h = pix.width / 2, pix.height / 2  # PNG captured at 2x for crispness
+        # Size the page to the image aspect, capping height under the PDF 14400 pt
+        # limit; the full-resolution image is embedded, so it stays sharp.
+        h = min(float(pix.height), MAX_PAGE_PT)
+        w = pix.width * (h / pix.height)
         out = fitz.open()
         page = out.new_page(width=w, height=h)
         page.insert_image(fitz.Rect(0, 0, w, h), stream=png_bytes)
         out.save(str(PDF), deflate=True)
+        dpi = round(pix.height / h * 72)
         mb = round(PDF.stat().st_size / 1e6, 1)
-        print(f"\nDone -> {PDF}  ({mb} MB, 1 page, {round(w)}x{round(h)} pt)")
+        print(f"\nDone -> {PDF}  ({mb} MB, 1 page, {round(w)}x{round(h)} pt, ~{dpi} DPI)")
 
 
 def _screenshot(html_path: Path) -> bytes:
+    from io import BytesIO
+
+    from PIL import Image
     from websocket import create_connection
 
     port = 9444
@@ -207,15 +223,25 @@ def _screenshot(html_path: Path) -> bytes:
         cs = m.get("cssContentSize") or m["contentSize"]
         w, h = math.ceil(cs["width"]), math.ceil(cs["height"])
         print(f"        content size: {w} x {h}")
-        shot = cmd(
-            "Page.captureScreenshot",
-            {
-                "format": "png",
-                "captureBeyondViewport": True,
-                "clip": {"x": 0, "y": 0, "width": w, "height": h, "scale": 2},
-            },
-        )
-        return base64.b64decode(shot["result"]["data"])
+        # Capture in vertical bands (Chrome caps screenshot height) and stitch.
+        canvas = Image.new("RGB", (w * SCALE, h * SCALE), "white")
+        y = 0
+        while y < h:
+            bh = min(BAND_CSS, h - y)
+            shot = cmd(
+                "Page.captureScreenshot",
+                {
+                    "format": "png",
+                    "captureBeyondViewport": True,
+                    "clip": {"x": 0, "y": y, "width": w, "height": bh, "scale": SCALE},
+                },
+            )
+            band = Image.open(BytesIO(base64.b64decode(shot["result"]["data"])))
+            canvas.paste(band, (0, y * SCALE))
+            y += bh
+        buf = BytesIO()
+        canvas.save(buf, format="PNG")
+        return buf.getvalue()
     finally:
         proc.terminate()
 
