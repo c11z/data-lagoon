@@ -29,10 +29,10 @@ def _():
 @app.cell
 def _(mo):
     mo.md("""
-    # Monzo — accounts model & `active_users_7d_rate`
+    # Monzo — Accounts Model & 7_day_active_users Metric
 
     A reliable **accounts** data model (Task 1) and a user-level **`active_users_7d_rate`**
-    model (Task 2) over `analytics-take-home-test.monzo_datawarehouse`.
+    metric (Task 2) over `analytics-take-home-test.monzo_datawarehouse`.
 
     **Approach.** Extract the four nightly-refreshed source tables once to parquet, then build
     everything as **deterministic DuckDB transforms materialised to parquet** (our stand-in for
@@ -40,6 +40,11 @@ def _(mo):
     `(snapshot_date, account)` carrying the account's state as of that date, so any historical
     figure is reproducible. The metric is computed in a **grouping-set cube** for fast,
     flexible slicing.
+
+    Deliverable is a PDF of this notebook with independent SQL files representing all tables
+    constructed. This project was produced by me (Cory Dominguez) leveraging BigQuery and a custom
+    LLM analytics harness called [Data Lagoon](https://github.com/c11z/data-lagoon) that I created
+    previously to explore BigQuery public datasets.
     """)
     return
 
@@ -62,9 +67,9 @@ def _():
 @app.cell
 def _(mo):
     mo.md("""
-    ## The dataset
+    ## The Dataset
 
-    `monzo_datawarehouse` (Monzo, a UK challenger bank) — four nightly-refreshed tables
+    The BigQuery `monzo_datawarehouse` dataset contains four "nightly-refreshed" tables
     derived from append-only backend logs: `account_created`, `account_closed`,
     `account_reopened` (lifecycle events) and `account_transactions` (a sparse daily
     transaction-count panel). Ids are hashed; counts only (no PII, amounts, or merchants).
@@ -76,22 +81,22 @@ def _(mo):
       at least one transaction; a missing (account, day) means **zero**, not missing.
       `transactions_num` ranges 1 to 1000 (1000 looks capped).
     - **Closures are event-grain.** 4,013 closure rows for 3,909 accounts (104 repeat
-      closures) but only 7 reopens — closure history is not internally consistent, so status
-      is resolved with an idempotent state machine.
+      closures) but only 7 reopens — closure history is not internally consistent, so account status
+      needs some resolution through an idempotent state machine.
     - **Account types.** `uk_retail`, `uk_retail_pot` (savings "Pots", which rarely transact),
       `uk_retail_joint`, plus 2 NULLs. Only ~4,327 of 12,000 accounts ever transact.
     - **Opaque hashed ids.** `account_id_hashed` / `user_id_hashed` are base64-encoded 512-bit
       one-way digests (join keys only). user-to-account is empirically 1:1 here, but per the
       brief we treat it as 1:Many.
     - **Static snapshot.** Treat "latest" as 2020-08-12; the final day is partial.
-    - **Metric naming.** We deliberately avoid `7d_active_users` as a column name: it starts
-      with a digit, so most SQL engines force you to quote/escape it (e.g. `"7d_active_users"`)
-      anywhere it is referenced, and the bare phrase is ambiguous — it could be read as a
-      **count** of active users rather than a **rate**. We name the two metrics
-      `active_users_7d_count` (the deduplicated user count) and `active_users_7d_rate` (that
-      count ÷ open users) instead, with `_1d`/`_28d` siblings.
+    - **Metric naming.** We deliberately avoid using the name `7d_active_users` as described in the
+      brief since it starts with a numeric digit, many SQL engines will require you to quote/escape
+      it (e.g. `"7d_active_users"`). Addiitonally the name is ambiguous — it could be read as a
+      **count** of active users rather than a **rate**. Instead we create two metrics
+      `active_users_7d_count` (the deduplicated active user count) and `active_users_7d_rate`
+      (that count ÷ open users) instead, with `_1d`/`_28d` siblings.
 
-    ### Modelling assumptions
+    ### Modelling Assumptions
 
     1. **Account state machine.** Open from `created_ts` until the latest closure; re-opened by
        a later reopen. Closures are **idempotent** (re-closing keeps it closed). Same-timestamp
@@ -101,21 +106,23 @@ def _(mo):
        "build day *D* from *D-1* + new events" table.
     3. **Account dimension dedup.** If a creation is duplicated we keep the **earliest**
        `created_ts` but the **latest** `user_id_hashed` and `account_type` — modelling that
-       accounts can transfer between users and that `account_type` evolves as a slowly-changing
+       accounts can transfer between users and that `account_type` might evolve as a slowly-changing
        dimension.
     4. **NULL `account_type` rows are dropped** (only 2) to keep breakdowns clean. In a
        production pipeline we would instead **monitor NULL `account_type` counts** as a
        data-quality signal rather than silently drop them.
-    5. **`user_id_hashed` treated as 1:Many**; every user figure uses `COUNT(DISTINCT user)`.
-    6. **Sparse activity filled.** Activity is left-joined onto the daily spine and absent days
+    5. **Treat `user_id_hashed`:`account_id_hashed` relationship as 1:Many**; every user
+       figure uses `COUNT(DISTINCT user)`, at production scale we would use a more efficient
+       function such as `APPROX_DISTINCT()`.
+    7. **Sparse activity filled.** Activity is left-joined onto the daily spine and absent days
        filled with 0. Transactions dated **before** an account's creation are **explicitly
        excluded** in `stg_transactions` (`txn_date >= created_date`) — 86 such rows (0.03%).
-    7. **`active_users_7d_rate` is user-attributed**: among users holding >=1 *open* account in a
+    8. **`active_users_7d_rate` is user-attributed**: among users holding >=1 *open* account in a
        group, the share who transacted on **any** account in the trailing 7 days. Users with
        only closed accounts are excluded. Group rates are **not additive** (a multi-type user
        counts in each type); the `ALL/ALL/ALL` row is the deduplicated headline.
-    8. **Age buckets** are coarse: `0-30 / 31-90 / 91-365 / 366+` days since creation.
-    9. **Determinism.** No `CURRENT_DATE`; `GLOBAL_MAX_DATE` is data-derived, so every
+    9. **Account Age Cohort** coursely bucketed for simplicity: `0-30 / 31-90 / 91-365 / 366+` days since creation.
+    10. **Fixed Time Frame** No `CURRENT_DATE`; `GLOBAL_MAX_DATE` is data-derived, so every
        historical rate is exactly recomputable. The final day (2020-08-12) is partial.
     """)
     return
@@ -149,7 +156,7 @@ def _(Path, config, mo):
 
 @app.cell
 def extract(DATA, HARD_GIB, QUERIES, SOFT_GIB, SOURCES, mo, pl):
-    # ---- PHASE 1: BigQuery EXACTLY ONCE per table; guard = file existence on disk. ----
+    # ---- BigQuery EXACTLY ONCE per table; guard = file existence on disk. ----
     # capped_query() dry-runs and enforces the hard cap internally before any billable work.
     _lines = []
     for _name, _sqlfile in SOURCES.items():
@@ -165,7 +172,7 @@ def extract(DATA, HARD_GIB, QUERIES, SOFT_GIB, SOURCES, mo, pl):
             _pq.parent.mkdir(parents=True, exist_ok=True)
             _df.write_parquet(_pq, compression="zstd")
             _lines.append(f"💸 Ran BigQuery once, froze `{_pq.name}` ({_df.height:,} rows).")
-    mo.md("### Phase 1 — extract\n\n" + "\n\n".join(_lines))
+    mo.md("### Extraction to Parquet for DuckDB\n\n" + "\n\n".join(_lines))
     return
 
 
@@ -243,7 +250,7 @@ def build_events(DATA, SOURCES, SOURCE_COLS, duckdb, mo):
         "SELECT event_type, COUNT(*) AS n FROM account_events GROUP BY 1 ORDER BY 2 DESC"
     ).pl()
     step_events = True
-    mo.vstack([mo.md(f"### Pipeline — events  ·  `GLOBAL_MAX_DATE = {GLOBAL_MAX_DATE}`"), _ev])
+    mo.vstack([mo.md("### Pipeline — Staging Events and Account State Machine"), _ev])
     return GLOBAL_MAX_DATE, con, step_events
 
 
@@ -295,7 +302,7 @@ def build_datelist(GLOBAL_MAX_DATE, MODELS, con, mo, step_events):
                  ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS INTEGER)  AS l7,
             CAST(SUM(had_txn) OVER (PARTITION BY account_id_hashed ORDER BY snapshot_date
                  ROWS BETWEEN 27 PRECEDING AND CURRENT ROW) AS INTEGER) AS l28,
-            transactions_num
+            COALESCE(transactions_num, 0) AS transactions_num
         FROM act
     """)
     con.execute(
@@ -310,7 +317,7 @@ def build_datelist(GLOBAL_MAX_DATE, MODELS, con, mo, step_events):
     )
     datelist_rows = con.execute("SELECT COUNT(*) FROM account_datelist").fetchone()[0]
     _sample = con.execute("""
-        SELECT snapshot_date, account_type, account_age_bucket, is_open, l1, l7, l28
+        SELECT snapshot_date, account_type, account_age_bucket, is_open, transactions_num, l1, l7, l28
         FROM account_datelist
         WHERE account_id_hashed = (
             SELECT account_id_hashed FROM account_datelist WHERE l28 > 2 LIMIT 1
@@ -321,8 +328,8 @@ def build_datelist(GLOBAL_MAX_DATE, MODELS, con, mo, step_events):
     mo.vstack(
         [
             mo.md(
-                f"### Task 1 — `account_datelist`  ·  **{datelist_rows:,} rows** "
-                "(one per account per day from creation)"
+                "### Task 1 — `account_datelist`\n"
+                f"**{datelist_rows:,} rows** (one per account per day from creation)"
             ),
             _sample,
         ]
@@ -416,8 +423,9 @@ def build_metric(MODELS, con, mo, step_datelist):
     mo.vstack(
         [
             mo.md(
-                f"### Task 2 — `metric_7d_active_users`  ·  **{metric_rows:,} rows** "
-                "(grouping-set cube: date x dimensions; rate as a metric column)"
+                "### Task 2 — Metric `7d_active_users`\n"
+                f"**{metric_rows:,} rows** (grouping-set cube: date x dimensions; "
+                "`active_users_7d_rate` as the metric column)"
             ),
             _sample,
         ]
@@ -517,9 +525,9 @@ def quality_checks(DATA, GT, MODELS, SOURCE_COLS, duckdb, mo, pl, step_metric):
         (
             "4 · Dimensional Drift",
             _status(_bad_type == 0 and _bad_txn == 0),
-            f"account_type stays in the known set ({_bad_type} unexpected) and transactions_num "
-            f"within [1, 1000] ({_bad_txn} out of range). A new upstream category or value "
-            "surfaces here instead of silently mis-bucketing.",
+            f"The account_type column stays in the known set ({_bad_type} unexpected) and "
+            f"transactions_num column within [1, 1000] ({_bad_txn} out of range). A new upstream "
+            "category or value surfaces here instead of silently mis-bucketing.",
         ),
         (
             "5 · Reconciliation / Completeness",
@@ -540,14 +548,14 @@ def quality_checks(DATA, GT, MODELS, SOURCE_COLS, duckdb, mo, pl, step_metric):
     mo.vstack(
         [
             mo.md(
-                "### Data quality checks "
-                "*(framed for changing, contract-free upstreams)*\n\n"
-                "Five categories — **Grain / Deduplication, Unexpected NULLs, Referential "
-                "Integrity, Dimensional Drift, Reconciliation / Completeness** — each rolling up "
-                "one or more checks. These run as **intermediate checks after each batch builds "
-                "the latest partitions**: **any failed category blocks downstream consumption** "
+                "### Data Quality Checks\n"
+                "Assuming raw unvalidated source data here are 7 specific checks associated with "
+                "5 categories: (Grain / Deduplication, Unexpected NULLs, Referential "
+                "Integrity, Dimensional Drift, and Reconciliation / Completeness) — each rolling up "
+                "one or more checks. These would run as intermediate checks after each batch builds "
+                "the latest partitions: any failed check blocks downstream consumption "
                 "(the datelist and cube are not published). A `warn` marks an anomaly the raw "
-                "data exhibited that we remediated in-pipeline and would monitor in production."
+                "data exhibited that we remediated in this notebook but would otherwise block in production."
             ),
             GT(checks_df)
             .tab_header(
