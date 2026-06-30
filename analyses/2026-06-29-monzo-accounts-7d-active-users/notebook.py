@@ -91,7 +91,7 @@ def _(mo):
     - **Static snapshot.** Treat "latest" as 2020-08-12; the final day is partial.
     - **Metric naming.** We deliberately avoid using the name `7d_active_users` as described in the
       brief since it starts with a numeric digit, many SQL engines will require you to quote/escape
-      it (e.g. `"7d_active_users"`). Addiitonally the name is ambiguous — it could be read as a
+      it (e.g. `"7d_active_users"`). Additionally the name is ambiguous — it could be read as a
       **count** of active users rather than a **rate**. Instead we create two metrics
       `active_users_7d_count` (the deduplicated active user count) and `active_users_7d_rate`
       (that count ÷ open users) instead, with `_1d`/`_28d` siblings.
@@ -114,15 +114,15 @@ def _(mo):
     5. **Treat `user_id_hashed`:`account_id_hashed` relationship as 1:Many**; every user
        figure uses `COUNT(DISTINCT user)`, at production scale we would use a more efficient
        function such as `APPROX_DISTINCT()`.
-    7. **Sparse activity filled.** Activity is left-joined onto the daily spine and absent days
+    6. **Sparse activity filled.** Activity is left-joined onto the daily spine and absent days
        filled with 0. Transactions dated **before** an account's creation are **explicitly
        excluded** in `stg_transactions` (`txn_date >= created_date`) — 86 such rows (0.03%).
-    8. **`active_users_7d_rate` is user-attributed**: among users holding >=1 *open* account in a
+    7. **`active_users_7d_rate` is user-attributed**: among users holding >=1 *open* account in a
        group, the share who transacted on **any** account in the trailing 7 days. Users with
        only closed accounts are excluded. Group rates are **not additive** (a multi-type user
        counts in each type); the `ALL/ALL/ALL` row is the deduplicated headline.
-    9. **Account Age Cohort** coursely bucketed for simplicity: `0-30 / 31-90 / 91-365 / 366+` days since creation.
-    10. **Fixed Time Frame** No `CURRENT_DATE`; `GLOBAL_MAX_DATE` is data-derived, so every
+    8. **Account Age Cohort** coarsely bucketed for simplicity: `0-30 / 31-90 / 91-365 / 366+` days since creation.
+    9. **Fixed Time Frame** No `CURRENT_DATE`; `GLOBAL_MAX_DATE` is data-derived, so every
        historical rate is exactly recomputable. The final day (2020-08-12) is partial.
     """)
     return
