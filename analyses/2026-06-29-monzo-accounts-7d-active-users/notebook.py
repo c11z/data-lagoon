@@ -79,7 +79,7 @@ def _(mo):
 
     - **Sparse activity panel.** `account_transactions` holds one row per (account, day) with
       at least one transaction; a missing (account, day) means **zero**, not missing.
-      `transactions_num` ranges 1 to 1000 (1000 looks capped).
+      the source `transactions_num` (exposed as `txn_count`) ranges 1 to 1000 (1000 looks capped).
     - **Closures are event-grain.** 4,013 closure rows for 3,909 accounts (104 repeat
       closures) but only 7 reopens — closure history is not internally consistent, so account status
       needs some resolution through an idempotent state machine.
@@ -144,12 +144,14 @@ def _(Path, config, mo):
         "raw_account_reopened": "03_account_reopened.sql",
         "raw_account_transactions": "04_account_transactions.sql",
     }
-    # Explicit column lists per source (we never SELECT *, anywhere).
+    # Explicit column lists per source (we never SELECT *, anywhere). The source column
+    # `transactions_num` is aliased to our convention `txn_count` here at the staging boundary;
+    # the BigQuery source table and cached parquet keep the original upstream name.
     SOURCE_COLS = {
         "raw_account_created": "created_ts, account_type, account_id_hashed, user_id_hashed",
         "raw_account_closed": "closed_ts, account_id_hashed",
         "raw_account_reopened": "reopened_ts, account_id_hashed",
-        "raw_account_transactions": "txn_date, account_id_hashed, transactions_num",
+        "raw_account_transactions": "txn_date, account_id_hashed, transactions_num AS txn_count",
     }
     return DATA, HARD_GIB, MODELS, QUERIES, SOFT_GIB, SOURCES, SOURCE_COLS
 
@@ -213,7 +215,7 @@ def build_events(DATA, SOURCES, SOURCE_COLS, duckdb, mo):
     # excluded (txn_date >= created_date) -- an account can't transact before it exists.
     con.execute("""
         CREATE OR REPLACE TABLE stg_transactions AS
-        SELECT t.account_id_hashed, t.txn_date, t.transactions_num
+        SELECT t.account_id_hashed, t.txn_date, t.txn_count
         FROM raw_account_transactions t
         JOIN stg_created c USING (account_id_hashed)
         WHERE t.txn_date >= c.created_date
@@ -293,15 +295,15 @@ def build_datelist(GLOBAL_MAX_DATE, MODELS, con, mo, step_events):
         act AS (
             SELECT
                 f.*,
-                CASE WHEN t.transactions_num IS NOT NULL THEN 1 ELSE 0 END AS had_txn,
-                t.transactions_num
+                CASE WHEN t.txn_count IS NOT NULL THEN 1 ELSE 0 END AS had_txn,
+                t.txn_count
             FROM filled f
             LEFT JOIN stg_transactions t
                 ON t.account_id_hashed = f.account_id_hashed AND t.txn_date = f.snapshot_date
         )
         SELECT
             snapshot_date, account_id_hashed, user_id_hashed, account_type, created_date,
-            datediff('day', created_date, snapshot_date) AS days_since_creation,
+            datediff('day', created_date, snapshot_date) AS account_age,
             CASE
                 WHEN datediff('day', created_date, snapshot_date) <= 30  THEN '0-30 (new)'
                 WHEN datediff('day', created_date, snapshot_date) <= 90  THEN '31-90'
@@ -314,13 +316,13 @@ def build_datelist(GLOBAL_MAX_DATE, MODELS, con, mo, step_events):
                  ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS INTEGER)  AS l7,
             CAST(SUM(had_txn) OVER (PARTITION BY account_id_hashed ORDER BY snapshot_date
                  ROWS BETWEEN 27 PRECEDING AND CURRENT ROW) AS INTEGER) AS l28,
-            COALESCE(transactions_num, 0) AS transactions_num
+            COALESCE(txn_count, 0) AS txn_count
         FROM act
     """)
     con.execute(
         "COPY (SELECT snapshot_date, account_id_hashed, user_id_hashed, account_type, "
-        "created_date, days_since_creation, account_age_bucket, is_open, l1, l7, l28, "
-        f"transactions_num FROM account_datelist) TO '{MODELS / 'account_datelist.parquet'}' "
+        "created_date, account_age, account_age_bucket, is_open, l1, l7, l28, "
+        f"txn_count FROM account_datelist) TO '{MODELS / 'account_datelist.parquet'}' "
         "(FORMAT PARQUET)"
     )
     con.execute(
@@ -329,7 +331,7 @@ def build_datelist(GLOBAL_MAX_DATE, MODELS, con, mo, step_events):
     )
     datelist_rows = con.execute("SELECT COUNT(*) FROM account_datelist").fetchone()[0]
     _sample = con.execute("""
-        SELECT snapshot_date, account_type, account_age_bucket, is_open, transactions_num, l1, l7, l28
+        SELECT snapshot_date, account_type, account_age_bucket, is_open, txn_count, l1, l7, l28
         FROM account_datelist
         WHERE account_id_hashed = (
             SELECT account_id_hashed FROM account_datelist WHERE l28 > 2 LIMIT 1
@@ -381,7 +383,7 @@ def build_metric(MODELS, con, mo, step_datelist):
     # the cube: active_users_7d_count/_rate (+1d/28d) as metric columns over grouping sets.
     # GROUPING()->'ALL'. Names are `_count` vs `_rate` and don't start with a digit (no escaping).
     con.execute("""
-        CREATE OR REPLACE TABLE metric_7d_active_users AS
+        CREATE OR REPLACE TABLE active_user_cube AS
         SELECT
             b.snapshot_date,
             IF(GROUPING(b.account_type) = 1, 'ALL', b.account_type) AS account_type,
@@ -421,13 +423,13 @@ def build_metric(MODELS, con, mo, step_datelist):
         "COPY (SELECT snapshot_date, account_type, account_age_bucket, signup_cohort, "
         "open_users, active_users_1d_count, active_users_7d_count, active_users_28d_count, "
         "active_users_1d_rate, active_users_7d_rate, active_users_28d_rate "
-        f"FROM metric_7d_active_users) TO '{MODELS / 'metric_7d_active_users.parquet'}' "
+        f"FROM active_user_cube) TO '{MODELS / 'active_user_cube.parquet'}' "
         "(FORMAT PARQUET)"
     )
-    metric_rows = con.execute("SELECT COUNT(*) FROM metric_7d_active_users").fetchone()[0]
+    metric_rows = con.execute("SELECT COUNT(*) FROM active_user_cube").fetchone()[0]
     _sample = con.execute("""
         SELECT snapshot_date, open_users, active_users_7d_count, active_users_7d_rate
-        FROM metric_7d_active_users
+        FROM active_user_cube
         WHERE account_type='ALL' AND account_age_bucket='ALL' AND signup_cohort='ALL'
         ORDER BY snapshot_date DESC LIMIT 5
     """).pl()
@@ -489,7 +491,7 @@ def quality_checks(DATA, GT, MODELS, SOURCE_COLS, duckdb, mo, pl, step_metric):
     )
     _bad_txn = q(
         "SELECT COUNT(*) FROM raw_account_transactions "
-        "WHERE transactions_num<1 OR transactions_num>1000"
+        "WHERE txn_count<1 OR txn_count>1000"
     )
     _orph = q(
         "SELECT COUNT(*) FROM (SELECT DISTINCT account_id_hashed FROM raw_account_closed "
@@ -538,7 +540,7 @@ def quality_checks(DATA, GT, MODELS, SOURCE_COLS, duckdb, mo, pl, step_metric):
             "4 · Dimensional Drift",
             _status(_bad_type == 0 and _bad_txn == 0),
             f"The account_type column stays in the known set ({_bad_type} unexpected) and "
-            f"transactions_num column within [1, 1000] ({_bad_txn} out of range). A new upstream "
+            f"txn_count column within [1, 1000] ({_bad_txn} out of range). A new upstream "
             "category or value surfaces here instead of silently mis-bucketing.",
         ),
         (
@@ -584,7 +586,7 @@ def quality_checks(DATA, GT, MODELS, SOURCE_COLS, duckdb, mo, pl, step_metric):
 def _(MODELS, mo, pl, step_metric):
     # ---- Load the small metric cube for charting (Phase-2: local parquet only). ----
     _ = step_metric
-    metric = pl.read_parquet(MODELS / "metric_7d_active_users.parquet")
+    metric = pl.read_parquet(MODELS / "active_user_cube.parquet")
     # Okabe-Ito: a colour-blind-safe qualitative palette, reused across every chart.
     OKABE_ITO = [
         "#0072B2",  # blue
@@ -696,6 +698,77 @@ def chart_by_age(OKABE_ITO, metric, pl, px):
 
 
 @app.cell
+def chart_cohort_heatmap(go, metric, pl):
+    # active_users_7d_rate by SIGNUP COHORT, age-aligned (classic retention triangle).
+    #
+    # signup_cohort partitions users 1:1 (the month of a user's first account), so unlike
+    # account_type/age it is a clean, non-overlapping cut of the base. Calendar-time lines would
+    # be ~37-way spaghetti; the informative view is RETENTION: align every cohort by age
+    # (months since signup) so column j compares each cohort's month-j 7d rate. We sample one
+    # point per (cohort, calendar-month) -- the MONTH-END snapshot -- consistent with "as of"
+    # semantics and the trailing-7d window.
+    _coh = (
+        metric.filter(
+            (pl.col("account_type") == "ALL")
+            & (pl.col("account_age_bucket") == "ALL")
+            & (pl.col("signup_cohort") != "ALL")
+        )
+        .with_columns(
+            # signup_cohort is a month-truncated TIMESTAMP rendered as 'YYYY-MM-01 00:00:00';
+            # slice the YYYY/MM rather than parse, so the format never bites us.
+            pl.col("signup_cohort").str.slice(0, 4).cast(pl.Int32).alias("_cy"),
+            pl.col("signup_cohort").str.slice(5, 2).cast(pl.Int32).alias("_cm"),
+        )
+        .with_columns(
+            (
+                (pl.col("snapshot_date").dt.year() - pl.col("_cy")) * 12
+                + (pl.col("snapshot_date").dt.month() - pl.col("_cm"))
+            ).alias("months_since_signup")
+        )
+        .sort("snapshot_date")
+    )
+    # One row per (cohort, months_since_signup): the latest (= month-end) snapshot in that month.
+    _month_end = _coh.group_by("signup_cohort", "months_since_signup", maintain_order=True).agg(
+        pl.col("active_users_7d_rate").last().alias("rate"),
+        pl.col("open_users").last().alias("open_users"),
+    )
+    _rows = _month_end.to_dicts()
+    _cohorts = sorted({r["signup_cohort"] for r in _rows})  # oldest -> newest
+    _xs = list(range(max(r["months_since_signup"] for r in _rows) + 1))
+    _lk = {(r["signup_cohort"], r["months_since_signup"]): r for r in _rows}
+    _z = [[(_lk.get((c, m)) or {}).get("rate") for m in _xs] for c in _cohorts]
+    _open = [[(_lk.get((c, m)) or {}).get("open_users") for m in _xs] for c in _cohorts]
+    _fig = go.Figure(
+        go.Heatmap(
+            z=_z,
+            x=_xs,
+            y=[c[:7] for c in _cohorts],  # 'YYYY-MM' label
+            customdata=_open,
+            colorscale="Viridis",
+            zmin=0,
+            colorbar={"title": "7d rate", "tickformat": ".0%"},
+            hovertemplate=(
+                "cohort %{y}<br>month %{x} since signup<br>"
+                "7d active rate %{z:.1%}<br>open users %{customdata:,}<extra></extra>"
+            ),
+        )
+    )
+    _fig.update_layout(
+        title=(
+            "active_users_7d_rate by signup cohort, age-aligned"
+            "<br><sub>rows = monthly signup cohort · x = months since signup · month-end "
+            "snapshots · each row traces one cohort's 7d rate as it ages · "
+            "early/small cohorts have noisy denominators</sub>"
+        ),
+        template="plotly_white",
+    )
+    _fig.update_xaxes(title_text="months since signup", dtick=3)
+    _fig.update_yaxes(title_text="signup cohort", autorange="reversed")  # oldest cohort on top
+    _fig
+    return
+
+
+@app.cell
 def table_latest(GT, metric, pl):
     # Latest-day snapshot: active_users_7d_rate by account_type x account_age.
     _gmax = metric["snapshot_date"].max()
@@ -740,7 +813,7 @@ def _(blocking_pass, datelist_rows, metric_rows, mo):
     _checks = "all pass ✅ (warnings remediated)" if blocking_pass else "FAILED ❌ (blocked)"
     mo.md(
         f"*Models: `account_datelist` ({datelist_rows:,} rows) · "
-        f"`metric_7d_active_users` ({metric_rows:,} rows). "
+        f"`active_user_cube` ({metric_rows:,} rows). "
         f"Data quality checks: {_checks}. "
         "`active_users_7d_rate` is user-attributed; the ALL/ALL/ALL row is the headline rate. "
         "Re-run is deterministic (no CURRENT_DATE; data-derived max date).*"
