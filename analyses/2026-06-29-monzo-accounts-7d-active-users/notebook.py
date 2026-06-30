@@ -174,7 +174,7 @@ def extract(DATA, HARD_GIB, QUERIES, SOFT_GIB, SOURCES, mo, pl):
             _pq.parent.mkdir(parents=True, exist_ok=True)
             _df.write_parquet(_pq, compression="zstd")
             _lines.append(f"💸 Ran BigQuery once, froze `{_pq.name}` ({_df.height:,} rows).")
-    mo.md("### Extraction to Parquet for DuckDB\n\n" + "\n\n".join(_lines))
+    mo.md("## Extraction to Parquet for DuckDB\n\n" + "\n\n".join(_lines))
     return
 
 
@@ -252,7 +252,7 @@ def build_events(DATA, SOURCES, SOURCE_COLS, duckdb, mo):
         "SELECT event_type, COUNT(*) AS n FROM account_events GROUP BY 1 ORDER BY 2 DESC"
     ).pl()
     step_events = True
-    mo.vstack([mo.md("### Pipeline — Staging Events and Account State Machine"), _ev])
+    mo.vstack([mo.md("## Staging Events and Account State Machine"), _ev])
     return GLOBAL_MAX_DATE, con, step_events
 
 
@@ -342,7 +342,7 @@ def build_datelist(GLOBAL_MAX_DATE, MODELS, con, mo, step_events):
     mo.vstack(
         [
             mo.md(
-                "### Task 1 — `account_datelist`\n"
+                "## Task 1 — `account_datelist` Model\n"
                 f"**{datelist_rows:,} rows** (one per account per day from creation)"
             ),
             _sample,
@@ -437,7 +437,7 @@ def build_metric(MODELS, con, mo, step_datelist):
     mo.vstack(
         [
             mo.md(
-                "### Task 2 — Metric `7d_active_users`\n"
+                "## Task 2 — `7d_active_users` Metric\n"
                 f"**{metric_rows:,} rows** (grouping-set cube: date x dimensions; "
                 "`active_users_7d_rate` as the metric column)"
             ),
@@ -562,7 +562,7 @@ def quality_checks(DATA, GT, MODELS, SOURCE_COLS, duckdb, mo, pl, step_metric):
     mo.vstack(
         [
             mo.md(
-                "### Data Quality Checks\n"
+                "## Data Quality Checks\n"
                 "Assuming raw unvalidated source data here are 7 specific checks associated with "
                 "5 categories: (Grain / Deduplication, Unexpected NULLs, Referential "
                 "Integrity, Dimensional Drift, and Reconciliation / Completeness) — each rolling up "
@@ -599,7 +599,7 @@ def _(MODELS, mo, pl, step_metric):
         "#000000",  # black
     ]
     mo.md(
-        "## Task 2 — `active_users_7d_rate` over time\n\n"
+        "## Visualizations — `active_users_7d_rate` over time\n\n"
         "*Rate = users active in the trailing window ÷ users with ≥1 open account "
         "(user-attributed). Early dates are noisy (tiny denominator); the final day is partial.*"
     )
