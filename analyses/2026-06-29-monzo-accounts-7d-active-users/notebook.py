@@ -258,17 +258,17 @@ def build_events(DATA, SOURCES, SOURCE_COLS, duckdb, mo):
 def build_datelist(GLOBAL_MAX_DATE, MODELS, con, mo, step_events):
     # ---- TASK 1: the cumulative account datelist (+ account-level lness l1/l7/l28). ----
     #
-    # We rebuild the entire history in one pass. That is the right call HERE: the source
-    # is a fixed, static snapshot, so there are no new days to append, and the rolling
-    # columns (l7/l28) and carried-forward `is_open` (last_value UNBOUNDED PRECEDING) all
-    # need cross-day history anyway — a single DuckDB pass computes them cheaply.
+    # We rebuild the entire history in one pass because the source is a fixed, static 
+    # snapshot, so there are no new days to append, and the rolling columns (l7/l28)
+    # and carried-forward `is_open` (last_value UNBOUNDED PRECEDING) all need cross-day
+    # history anyway — a single DuckDB pass computes them cheaply.
     #
-    # At production scale, with an evolving dataset, you would NOT rebuild all of history
-    # daily. You'd partition the table by `snapshot_date` and WRITE_TRUNCATE one partition
-    # per run (idempotent re-runs, no full rescan). The catch: l7/l28/is_open are
-    # cross-partition, so each incremental build must read back a ~28-day lookback (plus the
-    # account's prior status) rather than only that day's rows. That extra machinery earns
-    # its keep only when history actually grows — which it doesn't in this take-home.
+    # At production scale, with an evolving dataset, we would NOT rebuild all of history
+    # daily. we'd partition the table by `snapshot_date` and WRITE_TRUNCATE one partition
+    # per run (idempotent re-runs, no full rescan). There would be added complexity: 
+    # l7/l28/is_open are cross-partition, so each incremental build must read back a ~28-day
+    # lookback (plus the account's prior status) rather than only that day's rows. But this
+    # level of cross partition dependency is efficient at pedabyte scale in most modern Warehouses.
     _ = step_events  # ordering dependency
     con.execute(f"""
         CREATE OR REPLACE TABLE account_datelist AS
