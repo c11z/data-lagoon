@@ -229,9 +229,9 @@ def build_events(DATA, SOURCES, SOURCE_COLS, duckdb, mo):
         UNION ALL
         SELECT account_id_hashed, reopened_ts, 'reopened' FROM raw_account_reopened
     """)
-    # daily_status: the resolved status after the LAST event on each (account, day).
+    # account_status_events: the resolved status after the LAST event on each (account, day).
     con.execute("""
-        CREATE OR REPLACE TABLE daily_status AS
+        CREATE OR REPLACE TABLE account_status_events AS
         SELECT account_id_hashed, event_date, status_after
         FROM (
             SELECT
@@ -289,7 +289,7 @@ def build_datelist(GLOBAL_MAX_DATE, MODELS, con, mo, step_events):
                     ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
                 ) AS status
             FROM spine s
-            LEFT JOIN daily_status d
+            LEFT JOIN account_status_events d
                 ON d.account_id_hashed = s.account_id_hashed AND d.event_date = s.snapshot_date
         ),
         act AS (
