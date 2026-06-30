@@ -252,7 +252,7 @@ def build_events(DATA, SOURCES, SOURCE_COLS, duckdb, mo):
         "SELECT event_type, COUNT(*) AS n FROM account_events GROUP BY 1 ORDER BY 2 DESC"
     ).pl()
     step_events = True
-    mo.vstack([mo.md("## Staging Events and Account State Machine"), _ev])
+    mo.vstack([mo.md("## Staging Events and Account State Machine"), mo.show_code(), _ev])
     return GLOBAL_MAX_DATE, con, step_events
 
 
@@ -345,6 +345,7 @@ def build_datelist(GLOBAL_MAX_DATE, MODELS, con, mo, step_events):
                 "## Task 1 — `account_datelist` Model\n"
                 f"**{datelist_rows:,} rows** (one per account per day from creation)"
             ),
+            mo.show_code(),
             _sample,
         ]
     )
@@ -441,6 +442,7 @@ def build_metric(MODELS, con, mo, step_datelist):
                 f"**{metric_rows:,} rows** (grouping-set cube: date x dimensions; "
                 "`active_users_7d_rate` as the metric column)"
             ),
+            mo.show_code(),
             _sample,
         ]
     )
@@ -571,6 +573,7 @@ def quality_checks(DATA, GT, MODELS, SOURCE_COLS, duckdb, mo, pl, step_metric):
                 "(the datelist and cube are not published). A `warn` marks an anomaly the raw "
                 "data exhibited that we remediated in this notebook but would otherwise block in production."
             ),
+            mo.show_code(),
             GT(checks_df)
             .tab_header(
                 title="Accounts model — data quality checks",
@@ -663,6 +666,7 @@ def chart_by_type(OKABE_ITO, metric, pl, px):
         y="active_users_7d_rate",
         color="account_type",
         color_discrete_sequence=OKABE_ITO,
+        render_mode="svg",  # SVG (not WebGL) so the chart prints/screenshots reliably
         title="active_users_7d_rate by account_type",
         labels={"snapshot_date": "Date", "active_users_7d_rate": "7d active rate"},
     )
@@ -688,6 +692,7 @@ def chart_by_age(OKABE_ITO, metric, pl, px):
         color="account_age_bucket",
         category_orders={"account_age_bucket": _order},
         color_discrete_sequence=OKABE_ITO,
+        render_mode="svg",  # SVG (not WebGL) so the chart prints/screenshots reliably
         title="active_users_7d_rate by account age (tenure)",
         labels={"snapshot_date": "Date", "active_users_7d_rate": "7d active rate"},
     )
