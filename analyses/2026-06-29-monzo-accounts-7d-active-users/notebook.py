@@ -487,63 +487,51 @@ def quality_checks(DATA, GT, MODELS, SOURCE_COLS, duckdb, mo, pl, step_metric):
     )
     t.close()
 
-    def _ok(passed):
-        return "✅ pass" if passed else "❌ fail"
-
-    def _flag(clean):
-        return "✅ pass" if clean else "⚠️ warn"
+    # Each category rolls up one or more underlying checks. `blocking` failing -> fail (blocks
+    # downstream consumption); a tripped `advisory` -> warn (anomaly we remediated in-pipeline).
+    def _status(blocking, advisory_clean=True):
+        if not blocking:
+            return "❌ fail"
+        return "✅ pass" if advisory_clean else "⚠️ warn"
 
     _rows = [
         (
-            "1 · Grain / primary key",
-            _ok(_dup == 0),
-            f"Unique on (snapshot_date, account_id_hashed); {_dup} duplicate keys. "
+            "1 · Grain / Deduplication",
+            _status(_dup == 0),
+            f"One row per (snapshot_date, account_id_hashed) — {_dup} duplicate keys. "
             "A duplicate would fan out every downstream aggregate.",
         ),
         (
-            "2 · Reconciliation & completeness",
-            _ok(_acc_ok and _span_bad == 0),
-            f"Modelled accounts tie back to source (non-null type); {_span_bad} accounts with "
-            "gappy or short spines. Catches rows dropped/added or days missing after a refresh.",
+            "2 · Unexpected NULLs",
+            _status(_null_open == 0, _null_type == 0),
+            f"Modelled status is never NULL or open-before-creation ({_null_open}). "
+            f"Source account_type is NULL on {_null_type} accounts — dropped in-pipeline (2 rows, "
+            "immaterial); in production we'd alert on a NULL-rate threshold, not silently drop.",
         ),
         (
-            "3 · Category & range drift",
-            _ok(_bad_type == 0 and _bad_txn == 0),
-            f"{_bad_type} unexpected account_type values; {_bad_txn} transactions_num outside "
-            "[1, 1000]. A new upstream category surfaces here instead of silently mis-bucketing.",
-        ),
-        (
-            "4 · Referential integrity",
-            _ok(_orph == 0),
-            f"{_orph} closed/transacting accounts missing from account_created. "
+            "3 · Referential Integrity",
+            _status(_orph == 0),
+            f"Every closed or transacting account exists in account_created — {_orph} orphans. "
             "Catches mis-keyed or out-of-order upstream events.",
         ),
         (
-            "5 · Status validity & determinism",
-            _ok(_null_open == 0),
-            f"{_null_open} rows with a null status or open-before-creation. "
-            "Underpins reproducible, deterministic historical rates.",
+            "4 · Dimensional Drift",
+            _status(_bad_type == 0 and _bad_txn == 0),
+            f"account_type stays in the known set ({_bad_type} unexpected) and transactions_num "
+            f"within [1, 1000] ({_bad_txn} out of range). A new upstream category or value "
+            "surfaces here instead of silently mis-bucketing.",
         ),
         (
-            "6 · account_type completeness",
-            _flag(_null_type == 0),
-            f"How it failed: {_null_type} source accounts have a NULL account_type. "
-            "What we did: dropped them from the model (only 2, immaterial to the metric). "
-            "In production: quarantine and alert on a NULL-rate threshold rather than silently "
-            "drop, and chase the upstream schema contract.",
-        ),
-        (
-            "7 · Transaction timing",
-            _flag(_txn_before == 0),
-            f"How it failed: {_txn_before} transactions pre-date their account's creation. "
-            "What we did: excluded them in stg_transactions (txn_date >= created_date). "
-            "In production: quarantine and alert — this signals clock skew or backfill in the "
-            "source logs.",
+            "5 · Reconciliation / Completeness",
+            _status(_acc_ok and _span_bad == 0, _txn_before == 0),
+            f"Modelled accounts tie back to source and every spine is full-length "
+            f"({_span_bad} gappy or short). {_txn_before} transactions pre-date their account's "
+            "creation — excluded in-pipeline; in production we'd alert on this clock-skew signal.",
         ),
     ]
     checks_df = pl.DataFrame(
         {
-            "check": [r[0] for r in _rows],
+            "category": [r[0] for r in _rows],
             "result": [r[1] for r in _rows],
             "detail": [r[2] for r in _rows],
         }
@@ -554,17 +542,19 @@ def quality_checks(DATA, GT, MODELS, SOURCE_COLS, duckdb, mo, pl, step_metric):
             mo.md(
                 "### Data quality checks "
                 "*(framed for changing, contract-free upstreams)*\n\n"
-                "These run as **intermediate checks after each batch builds the latest "
-                "partitions** — **any failed check blocks downstream consumption** (the datelist "
-                "and cube are not published). A `warn` marks an anomaly the raw data exhibited "
-                "that we remediated in-pipeline and would monitor in production."
+                "Five categories — **Grain / Deduplication, Unexpected NULLs, Referential "
+                "Integrity, Dimensional Drift, Reconciliation / Completeness** — each rolling up "
+                "one or more checks. These run as **intermediate checks after each batch builds "
+                "the latest partitions**: **any failed category blocks downstream consumption** "
+                "(the datelist and cube are not published). A `warn` marks an anomaly the raw "
+                "data exhibited that we remediated in-pipeline and would monitor in production."
             ),
             GT(checks_df)
             .tab_header(
                 title="Accounts model — data quality checks",
                 subtitle="pass = clean · warn = anomaly detected, remediated in-pipeline",
             )
-            .cols_label(check="Check", result="Result", detail="Detail"),
+            .cols_label(category="Category", result="Result", detail="Detail"),
         ]
     )
     return (blocking_pass,)
