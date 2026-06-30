@@ -29,7 +29,7 @@ def _():
 @app.cell
 def _(mo):
     mo.md("""
-    # Monzo — Accounts Model & 7_day_active_users Metric
+    # Monzo — Accounts Model & 7d_active_users Metric
 
     A reliable **accounts** data model (Task 1) and a user-level **`active_users_7d_rate`**
     metric (Task 2) over `analytics-take-home-test.monzo_datawarehouse`.
