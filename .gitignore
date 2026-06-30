@@ -32,3 +32,6 @@ evals/runs/
 
 # --- OS ---
 .DS_Store
+
+# --- Claude Code (transient git worktrees / scratch) ---
+.claude/worktrees/
