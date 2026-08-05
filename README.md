@@ -59,7 +59,7 @@ uv run python scripts/bq_dry_run.py --file analyses/<slug>/queries/q.sql
 
 # Start a persistent, billing-safe analysis
 uv run python scripts/new_analysis.py --slug trends-demo --dataset google_trends
-uv run marimo edit analyses/<date>-trends-demo/notebook.py
+uv run marimo edit --watch analyses/<date>-trends-demo/notebook.py
 
 # Quality gates
 uv run ruff check . && uv run ruff format --check .

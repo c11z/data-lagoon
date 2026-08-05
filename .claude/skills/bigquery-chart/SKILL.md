@@ -40,7 +40,8 @@ BigQuery** — all inputs are on disk.
 4. **Add a Phase-2 chart cell**: build `fig` (plotly) and/or `great_tables.GT(df)` and leave
    it as the cell's **last bare expression** so marimo displays it inline. Give the cell's
    artifacts distinct names (single-definition rule). No `write_html` / `save`.
-5. **View**: `uv run marimo edit analyses/<slug>/notebook.py`. A static copy for sharing is
+5. **View**: `uv run marimo edit --watch analyses/<slug>/notebook.py` (watch mode re-runs
+   edited cells live). A static copy for sharing is
    the notebook skill's `marimo export html <notebook.py>` (exports the whole record) — not
    a hand-rolled per-figure HTML file.
 

@@ -25,6 +25,7 @@ dev = [
     "sqlfluff>=3.2",
     "marimo>=0.9",
     "rumdl>=0.2.17",
+    "watchdog>=5.0",
 ]
 
 [build-system]
@@ -44,6 +45,16 @@ default-groups = ["dev"]
 # ---------------------------------------------------------------------------
 [tool.marimo.display]
 custom_css = ["marimo-custom.css"]
+
+# With `marimo edit --watch`, auto-run cells affected by on-disk edits (e.g. an LLM
+# editing notebook.py) instead of just marking them stale. auto_instantiate makes the
+# notebook execute on open — without it, a fresh kernel shows cached outputs, nothing
+# has ever run, and reactive updates (including watch autorun) only mark descendants
+# stale instead of running them. Safe here: extraction cells are parquet-guarded, so
+# re-runs never re-bill BigQuery.
+[tool.marimo.runtime]
+watcher_on_save = "autorun"
+auto_instantiate = true
 
 # ---------------------------------------------------------------------------
 # ruff — Python linter + formatter (run: uv run ruff check --fix . && uv run ruff format .)

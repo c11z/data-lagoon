@@ -15,7 +15,7 @@ Export: uv run marimo export html <this notebook> -o out/notebook.html   (then p
 
 import marimo
 
-__generated_with = "0.23.9"
+__generated_with = "0.23.13"
 app = marimo.App(width="medium", auto_download=["html"])
 
 
@@ -252,7 +252,7 @@ def build_events(DATA, SOURCES, SOURCE_COLS, duckdb, mo):
         "SELECT event_type, COUNT(*) AS n FROM account_events GROUP BY 1 ORDER BY 2 DESC"
     ).pl()
     step_events = True
-    mo.vstack([mo.md("## Staging Events and Account State Machine"), mo.show_code(), _ev])
+    mo.vstack([mo.md("## Staging Events and Account State Machine"), _ev])
     return GLOBAL_MAX_DATE, con, step_events
 
 
@@ -345,7 +345,6 @@ def build_datelist(GLOBAL_MAX_DATE, MODELS, con, mo, step_events):
                 "## Task 1 — `account_datelist` Model\n"
                 f"**{datelist_rows:,} rows** (one per account per day from creation)"
             ),
-            mo.show_code(),
             _sample,
         ]
     )
@@ -442,7 +441,6 @@ def build_metric(MODELS, con, mo, step_datelist):
                 f"**{metric_rows:,} rows** (grouping-set cube: date x dimensions; "
                 "`active_users_7d_rate` as the metric column)"
             ),
-            mo.show_code(),
             _sample,
         ]
     )
@@ -573,7 +571,6 @@ def quality_checks(DATA, GT, MODELS, SOURCE_COLS, duckdb, mo, pl, step_metric):
                 "(the datelist and cube are not published). A `warn` marks an anomaly the raw "
                 "data exhibited that we remediated in this notebook but would otherwise block in production."
             ),
-            mo.show_code(),
             GT(checks_df)
             .tab_header(
                 title="Accounts model — data quality checks",

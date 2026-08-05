@@ -32,8 +32,11 @@ Read `references/marimo-cells.md` before editing cells.
    → creates `analyses/<date>-<slug>/{notebook.py, data/, queries/, out/}`.
 2. **Set the request** in the notebook's `_config` cell (metric, dimensions, segments,
    time window, caps) — it compiles cost-safe SQL from the DomainSpec.
-3. **Run**: `uv run marimo edit analyses/<date>-<slug>/notebook.py`. Phase 1 calls BigQuery
-   only if the parquet is missing (it dry-runs and caps via `capped_query()`).
+3. **Run**: `uv run marimo edit --watch analyses/<date>-<slug>/notebook.py`. `--watch` syncs
+   the browser with on-disk edits, and `watcher_on_save = "autorun"` (pyproject) re-runs
+   affected cells automatically — the user watches results update live as the file is edited.
+   Phase 1 calls BigQuery only if the parquet is missing (it dry-runs and caps via
+   `capped_query()`).
 4. **Save the SQL** the notebook compiled into `queries/` and lint it
    (`uv run sqlfluff lint analyses/<date>-<slug>/queries/`).
 5. **Share**: `uv run marimo export html analyses/<date>-<slug>/notebook.py` for a static record.
