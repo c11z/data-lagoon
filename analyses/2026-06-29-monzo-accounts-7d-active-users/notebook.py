@@ -121,7 +121,8 @@ def _(mo):
        group, the share who transacted on **any** account in the trailing 7 days. Users with
        only closed accounts are excluded. Group rates are **not additive** (a multi-type user
        counts in each type); the `ALL/ALL/ALL` row is the deduplicated headline.
-    8. **Account Age Cohort** coarsely bucketed for simplicity: `0-30 / 31-90 / 91-365 / 366+` days since creation.
+    8. **Account Age Cohort** coarsely bucketed for simplicity:
+       `0-30 / 31-90 / 91-365 / 366+` days since creation.
     9. **Fixed Time Frame** No `CURRENT_DATE`; `GLOBAL_MAX_DATE` is data-derived, so every
        historical rate is exactly recomputable. The final day (2020-08-12) is partial.
     """)
@@ -260,14 +261,14 @@ def build_events(DATA, SOURCES, SOURCE_COLS, duckdb, mo):
 def build_datelist(GLOBAL_MAX_DATE, MODELS, con, mo, step_events):
     # ---- TASK 1: the cumulative account datelist (+ account-level lness l1/l7/l28). ----
     #
-    # We rebuild the entire history in one pass because the source is a fixed, static 
+    # We rebuild the entire history in one pass because the source is a fixed, static
     # snapshot, so there are no new days to append, and the rolling columns (l7/l28)
     # and carried-forward `is_open` (last_value UNBOUNDED PRECEDING) all need cross-day
     # history anyway — a single DuckDB pass computes them cheaply.
     #
     # At production scale, with an evolving dataset, we would NOT rebuild all of history
     # daily. we'd partition the table by `snapshot_date` and WRITE_TRUNCATE one partition
-    # per run (idempotent re-runs, no full rescan). There would be added complexity: 
+    # per run (idempotent re-runs, no full rescan). There would be added complexity:
     # l7/l28/is_open are cross-partition, so each incremental build must read back a ~28-day
     # lookback (plus the account's prior status) rather than only that day's rows. But this
     # level of cross partition dependency is efficient at pedabyte scale in most modern Warehouses.
@@ -490,8 +491,7 @@ def quality_checks(DATA, GT, MODELS, SOURCE_COLS, duckdb, mo, pl, step_metric):
         "WHERE account_type NOT IN ('uk_retail','uk_retail_pot','uk_retail_joint')"
     )
     _bad_txn = q(
-        "SELECT COUNT(*) FROM raw_account_transactions "
-        "WHERE txn_count<1 OR txn_count>1000"
+        "SELECT COUNT(*) FROM raw_account_transactions WHERE txn_count<1 OR txn_count>1000"
     )
     _orph = q(
         "SELECT COUNT(*) FROM (SELECT DISTINCT account_id_hashed FROM raw_account_closed "
@@ -563,13 +563,14 @@ def quality_checks(DATA, GT, MODELS, SOURCE_COLS, duckdb, mo, pl, step_metric):
         [
             mo.md(
                 "## Data Quality Checks\n"
-                "Assuming raw unvalidated source data here are 7 specific checks associated with "
-                "5 categories: (Grain / Deduplication, Unexpected NULLs, Referential "
-                "Integrity, Dimensional Drift, and Reconciliation / Completeness) — each rolling up "
-                "one or more checks. These would run as intermediate checks after each batch builds "
-                "the latest partitions: any failed check blocks downstream consumption "
-                "(the datelist and cube are not published). A `warn` marks an anomaly the raw "
-                "data exhibited that we remediated in this notebook but would otherwise block in production."
+                "Assuming raw unvalidated source data here are 7 specific checks "
+                "associated with 5 categories: (Grain / Deduplication, Unexpected NULLs, "
+                "Referential Integrity, Dimensional Drift, and Reconciliation / "
+                "Completeness) — each rolling up one or more checks. These would run as "
+                "intermediate checks after each batch builds the latest partitions: any "
+                "failed check blocks downstream consumption (the datelist and cube are "
+                "not published). A `warn` marks an anomaly the raw data exhibited that we "
+                "remediated in this notebook but would otherwise block in production."
             ),
             GT(checks_df)
             .tab_header(

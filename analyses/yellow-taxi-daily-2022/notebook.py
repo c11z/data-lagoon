@@ -92,8 +92,7 @@ def analyze(date, df, pl):
     # 18 dirty out-of-2022 dates are dropped) and add a 7-day rolling mean. ----
     clean = (
         df.filter(
-            (pl.col("trip_date") >= date(2022, 1, 1))
-            & (pl.col("trip_date") <= date(2022, 11, 30))
+            (pl.col("trip_date") >= date(2022, 1, 1)) & (pl.col("trip_date") <= date(2022, 11, 30))
         )
         .sort("trip_date")
         .with_columns(pl.col("trips").rolling_mean(window_size=7).alias("trips_7d_avg"))
@@ -109,22 +108,35 @@ def chart(clean, date):
 
     fig = go.Figure()
     fig.add_scatter(
-        x=clean["trip_date"], y=clean["trips"], mode="lines", name="Daily trips",
+        x=clean["trip_date"],
+        y=clean["trips"],
+        mode="lines",
+        name="Daily trips",
         line={"color": "#9ecae1", "width": 1},
     )
     fig.add_scatter(
-        x=clean["trip_date"], y=clean["trips_7d_avg"], mode="lines", name="7-day avg",
+        x=clean["trip_date"],
+        y=clean["trips_7d_avg"],
+        mode="lines",
+        name="7-day avg",
         line={"color": "#08519c", "width": 2.5},
     )
     fig.add_annotation(
-        x=date(2022, 12, 1), y=clean["trips"].max(),
+        x=date(2022, 12, 1),
+        y=clean["trips"].max(),
         text="December 2022 absent<br>from source snapshot",
-        showarrow=True, arrowhead=2, ax=-60, ay=-20, font={"size": 11, "color": "#a50f15"},
+        showarrow=True,
+        arrowhead=2,
+        ax=-60,
+        ay=-20,
+        font={"size": 11, "color": "#a50f15"},
     )
     fig.update_layout(
         title="NYC Yellow Taxi - daily trips, 2022 (Jan 1 to Nov 30)",
-        xaxis_title="Pickup date", yaxis_title="Trips per day",
-        template="plotly_white", hovermode="x unified",
+        xaxis_title="Pickup date",
+        yaxis_title="Trips per day",
+        template="plotly_white",
+        hovermode="x unified",
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0},
     )
     fig  # last bare expression → marimo renders it inline
